@@ -5,7 +5,9 @@ import { formatBR, formatDateTimeBR, todayISO } from "../lib/dates";
 import { hostLabel, isHttpUrl } from "../lib/links";
 import { filterTasks } from "../lib/filters";
 import { computeMetrics, metricsScope } from "../lib/metrics";
+import { ARCHIVE_AFTER_DAYS, completedOn, splitArchived } from "../lib/archive";
 import { percentOf, pieShapes } from "../lib/pie";
+import { participates, unreadCount, unreadTasks } from "../lib/unread";
 import { resolveSubtaskDates, wouldCreateCycle } from "../lib/subtaskDates";
 import {
   buildPersonReport,
@@ -512,7 +514,10 @@ function taskCard(me: Profile, task: Task): Safe {
   const canAddSub = canManageSubtasks(me, task);
   const expanded = state.openTasks.has(task.id);
   const chip = countdownChip(deadlineInfo(task.end_date, status === "done", todayISO()));
-  const title = cardTitle("toggle-task", task.id, expanded, task.title, chip);
+  const fresh = participates(me, state.read, task) ? unreadCount(state.read, task) : 0;
+  const finished = state.taskList === "archived" ? completedOn(task) : null;
+  const extra = html`${fresh > 0 && html`<span class="badge new-badge">${fresh} ${fresh === 1 ? "novo" : "novos"}</span>`}${chip}${finished !== null && html`<span class="chip">Concluída em ${formatBR(finished)}</span>`}`;
+  const title = cardTitle("toggle-task", task.id, expanded, task.title, extra);
   if (!expanded) {
     return html`<article class="card is-collapsed status-${status} ${late && "is-late"}">
       ${title}
@@ -540,7 +545,8 @@ function taskCard(me: Profile, task: Task): Safe {
             data-id="${task.id}"
           >
             Comentários${
-              task.comment_count > 0 && html` <span class="count-pill">${task.comment_count}</span>`
+              task.comment_count > 0 &&
+              html` <span class="count-pill ${fresh > 0 && "new"}">${task.comment_count}</span>`
             }
           </button>`
         }
@@ -640,20 +646,84 @@ function taskCard(me: Profile, task: Task): Safe {
   </article>`;
 }
 
+/** Tarefas da lista aberta na aba Tarefas (ativas ou arquivadas), já com os filtros. */
+export function currentTaskList(today = todayISO()): Task[] {
+  const { active, archived } = splitArchived(state.tasks, today);
+  return filterTasks(state.taskList === "archived" ? archived : active, state.filters, today);
+}
+
+/** Aviso no topo: comentários novos nas tarefas em que a pessoa participa. */
+function unreadBanner(me: Profile): Safe {
+  if (!state.extras) {
+    return html``;
+  }
+  const items = unreadTasks(me, state.read, state.tasks);
+  if (items.length === 0) {
+    return html``;
+  }
+  let total = 0;
+  for (const item of items) {
+    total += item.count;
+  }
+  return html`<div class="notice new-comments" role="status">
+    <strong>${total} ${total === 1 ? "comentário novo" : "comentários novos"}</strong>
+    em ${items.length} ${items.length === 1 ? "tarefa" : "tarefas"}:
+    ${items.map(
+      ({ task, count }) =>
+        html`<button
+          class="chip-btn"
+          type="button"
+          data-action="open-comments"
+          data-id="${task.id}"
+        >
+          ${task.title} <b>${count}</b>
+        </button>`,
+    )}
+  </div>`;
+}
+
 export function tasksView(): Safe {
   const me = currentUser();
-  const visible = filterTasks(state.tasks, state.filters, todayISO());
   if (state.tasks.length === 0) {
     return html`<p class="empty">${emptyMessage(me)}</p>`;
   }
+  const today = todayISO();
+  const { active, archived } = splitArchived(state.tasks, today);
+  const isArchivedList = state.taskList === "archived";
+  const showing = isArchivedList ? archived : active;
+  const visible = filterTasks(showing, state.filters, today);
   const allOpen = visible.length > 0 && visible.every((t) => state.openTasks.has(t.id));
-  return html`<div class="tasks-bar">
-      <p class="count">${visible.length} de ${state.tasks.length} tarefas</p>
+  const lists: { key: "active" | "archived"; label: string; count: number }[] = [
+    { key: "active", label: "Ativas", count: active.length },
+    { key: "archived", label: "Arquivados", count: archived.length },
+  ];
+  let empty = "Nenhuma tarefa corresponde aos filtros.";
+  if (showing.length === 0) {
+    empty = isArchivedList
+      ? `Nenhuma tarefa arquivada. Tarefas concluídas há ${ARCHIVE_AFTER_DAYS} dias ou mais aparecem aqui.`
+      : "Nenhuma tarefa ativa. As concluídas há mais tempo estão em Arquivados.";
+  }
+  return html`${unreadBanner(me)}
+    <div class="tasks-bar">
+      <div class="segmented" role="group" aria-label="Lista">
+        ${lists.map(
+          (l) =>
+            html`<button
+              type="button"
+              data-action="set-list"
+              data-list="${l.key}"
+              ${l.key === state.taskList && raw('aria-pressed="true"')}
+            >
+              ${l.label} (${l.count})
+            </button>`,
+        )}
+      </div>
+      <p class="count">${visible.length} de ${showing.length} tarefas</p>
       ${visible.length > 0 && expandSwitch("toggle-all", allOpen, "Expandir todas as tarefas")}
     </div>
     ${
       visible.length === 0
-        ? html`<p class="empty">Nenhuma tarefa corresponde aos filtros.</p>`
+        ? html`<p class="empty">${empty}</p>`
         : html`<div class="cards">${visible.map((t) => taskCard(me, t))}</div>`
     }`;
 }
@@ -890,22 +960,27 @@ export interface ConfirmOptions {
   subject: string;
   message: string;
   confirmLabel: string;
+  /** "ok" (verde, concluir) ou "danger" (vermelho, excluir). */
+  tone?: "ok" | "danger";
 }
 
 /** Popup de confirmação: `<form method="dialog">` fecha com returnValue "ok" ou "cancel". */
 export function confirmDialog(options: ConfirmOptions): Safe {
+  const danger = options.tone === "danger";
   return html`<form method="dialog" class="confirm">
-    <span class="confirm-icon" aria-hidden="true">
+    <span class="confirm-icon ${danger && "danger"}" aria-hidden="true">
       <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M5 12.5l4.5 4.5L19 7.5" />
+        ${danger ? html`<path d="M12 6.5v7M12 17.5h.01" />` : html`<path d="M5 12.5l4.5 4.5L19 7.5" />`}
       </svg>
     </span>
     <h2>${options.title}</h2>
-    <p class="confirm-subject">${options.subject}</p>
+    ${options.subject !== "" && html`<p class="confirm-subject">${options.subject}</p>`}
     <p class="muted">${options.message}</p>
     <div class="row end">
       <button class="btn" type="submit" value="cancel">Cancelar</button>
-      <button class="btn primary" type="submit" value="ok" autofocus>${options.confirmLabel}</button>
+      <button class="btn ${danger ? "danger-solid" : "primary"}" type="submit" value="ok" autofocus>
+        ${options.confirmLabel}
+      </button>
     </div>
   </form>`;
 }

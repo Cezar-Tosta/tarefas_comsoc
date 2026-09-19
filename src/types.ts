@@ -50,7 +50,9 @@ export interface Task {
   subtasks: Subtask[];
   links: TaskLink[];
   comment_count: number;
+  /** Quando foi concluída (calculado pelo banco; ausente sem a migração 007). */
+  completed_at?: string | null;
 }
 
-export type TaskInput = Omit<Task, "id" | "subtasks" | "links" | "comment_count">;
+export type TaskInput = Omit<Task, "id" | "subtasks" | "links" | "comment_count" | "completed_at">;
 export type SubtaskInput = Omit<Subtask, "id" | "position">;

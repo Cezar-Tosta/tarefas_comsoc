@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { emptyReadState } from "../lib/unread";
 import { state } from "../state";
 import type { Profile, Task } from "../types";
 import {
@@ -83,6 +84,8 @@ function as(me: Profile): void {
   state.tasks = makeTasks();
   state.openDone = new Set();
   state.openTasks = new Set(["t1", "t2"]);
+  state.taskList = "active";
+  state.read = emptyReadState();
   state.openPeople = new Set(["a", "u1", "u2", "__unassigned__"]);
 }
 
@@ -268,7 +271,7 @@ describe("links and comments", () => {
     withLinks();
     const out = tasksView().value;
     expect(out).toMatch(/data-action="open-comments"\s+data-id="t1"/);
-    expect(out).toMatch(/count-pill">3</);
+    expect(out).toMatch(/count-pill\s*">3</);
     expect(out).toContain('href="https://exemplo.com/p"');
     expect(out).toContain('rel="noopener noreferrer"');
     expect(out).not.toContain('href="javascript:');
@@ -528,6 +531,81 @@ describe("subtask starting after another", () => {
       throw new Error("fixture vazia");
     }
     expect(subtaskDialog(task, s2).value).toMatch(/name="start_date"[^>]*readonly/);
+  });
+});
+
+describe("danger confirmation", () => {
+  it("uses the red style and hides an empty subject", () => {
+    const out = confirmDialog({
+      title: "Excluir tarefa?",
+      subject: "",
+      message: "Esta ação não pode ser desfeita.",
+      confirmLabel: "Excluir",
+      tone: "danger",
+    }).value;
+    expect(out).toContain("danger-solid");
+    expect(out).toContain("confirm-icon danger");
+    expect(out).not.toContain("confirm-subject");
+  });
+});
+
+describe("archived list", () => {
+  function archiveT1(): void {
+    const t1 = state.tasks[0];
+    if (!t1) {
+      throw new Error("fixture vazia");
+    }
+    t1.status = "done";
+    t1.subtasks = [];
+    t1.completed_at = "2026-01-01T12:00:00";
+  }
+
+  it("moves tasks finished 10+ days ago out of the active list", () => {
+    archiveT1();
+    const active = tasksView().value;
+    expect(active).not.toContain("Relatório &lt;b&gt;anual");
+    expect(active).toContain("Sem datas");
+    expect(active).toMatch(/Arquivados \(1\)/);
+    state.taskList = "archived";
+    const archived = tasksView().value;
+    expect(archived).toContain("Relatório &lt;b&gt;anual");
+    expect(archived).not.toContain("Sem datas");
+    expect(archived).toContain("Concluída em 01/01/2026");
+    state.taskList = "active";
+  });
+
+  it("explains an empty Arquivados list", () => {
+    state.taskList = "archived";
+    expect(tasksView().value).toContain("Nenhuma tarefa arquivada");
+    state.taskList = "active";
+  });
+});
+
+describe("new comments notice", () => {
+  it("shows a banner for tasks the user takes part in, with per-task counts", () => {
+    as(ana); // dona de t1
+    state.read = { seen: { t1: 1, t2: 0 }, mine: [] };
+    const t1 = state.tasks[0]!;
+    t1.comment_count = 4;
+    const out = tasksView().value;
+    expect(out).toContain("new-comments");
+    expect(out).toContain("3 comentários novos");
+    expect(out).toMatch(/data-action="open-comments"\s+data-id="t1"/);
+    expect(out).toContain("3 novos");
+  });
+
+  it("shows nothing when everything was read", () => {
+    as(ana);
+    state.read = { seen: { t1: 2 }, mine: [] };
+    state.tasks[0]!.comment_count = 2;
+    expect(tasksView().value).not.toContain("new-comments");
+  });
+
+  it("does not warn about tasks the user is not part of", () => {
+    as(ana);
+    state.read = { seen: { t1: 0 }, mine: [] };
+    state.tasks[0]!.comment_count = 0;
+    expect(tasksView().value).not.toContain("new-comments");
   });
 });
 

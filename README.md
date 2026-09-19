@@ -7,7 +7,9 @@ Front-end estático (Vite + TypeScript, sem framework) e **Supabase** como backe
 
 - **Tarefas e subtarefas**: cadastrar, editar, excluir; responsável, prioridade, status, datas de início/fim.
 - **Lista de tarefas**: cada tarefa aparece encolhida (só o nome, com "Faltam N dias", "HOJE" ou "Atrasada há N dias"); ao clicar, abre com todos os detalhes. Um switch "Encolher tudo / Expandir tudo" controla todas de uma vez.
-- **Confirmação**: marcar uma tarefa ou subtarefa como concluída pede confirmação.
+- **Confirmação**: concluir e excluir (tarefa, subtarefa, usuário, comentário) pedem confirmação num popup no visual do site.
+- **Arquivados**: a aba Tarefas tem as listas "Ativas" e "Arquivados"; tarefas concluídas há 10 dias ou mais vão para Arquivados (a data de conclusão é registrada pelo banco). Reabrir a tarefa a traz de volta.
+- **Comentários novos**: um aviso no topo da aba Tarefas lista as tarefas com comentários que você ainda não leu (as suas, com subtarefa sua, ou em que você comentou), e cada tarefa mostra o selo "N novos". O controle do que já foi lido fica no navegador, e a lista é atualizada sozinha a cada minuto.
 - **Progresso**: percentual por tarefa calculado pelas subtarefas concluídas + progresso geral.
 - **Subtarefas**: checkbox; as concluídas ficam riscadas e agrupadas em um bloco recolhido ("Concluídas (n)"). Uma subtarefa pode **começar logo após o término de outra** (o início vira o dia seguinte ao fim da anterior e acompanha as mudanças dela). Usuários comuns veem só o essencial, sem datas.
 - **Gantt**: escala por dia/semana/mês, linha de "hoje", barras com progresso, subtarefas opcionais, atrasadas em vermelho. Só tem os filtros básicos; "Ocultar concluídas" fica junto de "Mostrar subtarefas".
@@ -33,7 +35,7 @@ Front-end estático (Vite + TypeScript, sem framework) e **Supabase** como backe
 ## Configuração (uma vez)
 
 1. Crie um projeto em <https://supabase.com>.
-2. No **SQL Editor**, cole e execute o **conteúdo** de `supabase/schema.sql` e, em seguida, de `supabase/002_comments_links.sql` (comentários e links), `supabase/003_user_visibility.sql` (cada usuário só enxerga o que está ligado a ele), `supabase/004_delete_user.sql` (excluir usuários pela aba Usuários; sem ela o botão Excluir dá erro), `supabase/005_subtask_start_after.sql` (subtarefa que começa após o término de outra; sem ela só esse vínculo falha) e `supabase/006_user_completes_only.sql` (**importante**: no banco, usuários só concluem e comentam; sem ela a restrição existe só na interface). Rode cada um, nessa ordem.
+2. No **SQL Editor**, cole e execute o **conteúdo** de `supabase/schema.sql` e, em seguida, de `supabase/002_comments_links.sql` (comentários e links), `supabase/003_user_visibility.sql` (cada usuário só enxerga o que está ligado a ele), `supabase/004_delete_user.sql` (excluir usuários pela aba Usuários; sem ela o botão Excluir dá erro), `supabase/005_subtask_start_after.sql` (subtarefa que começa após o término de outra; sem ela só esse vínculo falha), `supabase/006_user_completes_only.sql` (**importante**: no banco, usuários só concluem e comentam; sem ela a restrição existe só na interface) e `supabase/007_task_completed_at.sql` (data de conclusão, base dos Arquivados; sem ela nada é arquivado). Rode cada um, nessa ordem.
 3. Em **Authentication → Providers → Email**, **desative "Confirm email"**: novas contas
    não recebem e-mail de confirmação e só aguardam a aprovação de um administrador (com a opção ligada, o cadastro
    exige confirmar o e-mail antes do primeiro login). Em **Authentication → URL Configuration**,

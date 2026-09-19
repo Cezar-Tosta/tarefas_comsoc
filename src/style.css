@@ -2321,3 +2321,47 @@ svg .pie-pending {
     width: auto;
   }
 }
+
+/* ---------- popup de exclusão ---------- */
+
+.confirm-icon.danger {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 16%, var(--surface));
+}
+
+.btn.danger-solid {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn.danger-solid:hover {
+  filter: brightness(1.08);
+  background: var(--danger);
+}
+
+/* ---------- comentários novos ---------- */
+
+.new-comments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 10px;
+}
+
+.badge.new-badge {
+  background: color-mix(in srgb, var(--st-doing) 20%, var(--surface));
+  color: var(--st-doing);
+  font-weight: 700;
+}
+
+.count-pill.new {
+  background: var(--st-doing);
+  color: #fff;
+}
+
+.tasks-bar .segmented {
+  order: -1;
+}

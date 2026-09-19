@@ -5,13 +5,15 @@ import { todayISO } from "./lib/dates";
 import { DEFAULT_FILTERS, filterTasks } from "./lib/filters";
 import type { Zoom } from "./lib/gantt";
 import { normalizeUrl } from "./lib/links";
+import { markMine, markSeen, reconcile } from "./lib/unread";
 import { wouldCreateCycle } from "./lib/subtaskDates";
 import { canManageUsers, canSeeReports, visibleTasks } from "./lib/permissions";
-import { currentUser, savePrefs, state, type View } from "./state";
+import { currentUser, loadRead, saveRead, savePrefs, state, type View } from "./state";
 import type { Priority, Role, Status, TaskInput } from "./types";
 import { html, mount, type Safe } from "./ui/html";
 import {
   chatMessages,
+  currentTaskList,
   commentsDialog,
   confirmDialog,
   type ConfirmOptions,
@@ -140,10 +142,18 @@ function scrollGanttToToday(): void {
 
 // ---------- carga de dados ----------
 
+/** Ajusta o controle de comentários lidos ao que veio do banco. */
+function syncRead(): void {
+  if (state.me && reconcile(state.read, state.tasks)) {
+    saveRead(state.me.id, state.read);
+  }
+}
+
 async function loadTasks(): Promise<void> {
   const { tasks, extras } = await api.fetchTasks();
   state.tasks = visibleTasks(currentUser(), tasks);
   state.extras = extras;
+  syncRead();
 }
 
 async function loadAll(): Promise<void> {
@@ -151,6 +161,7 @@ async function loadAll(): Promise<void> {
   state.tasks = visibleTasks(currentUser(), loaded.tasks);
   state.extras = loaded.extras;
   state.profiles = profiles;
+  syncRead();
 }
 
 export async function boot(): Promise<void> {
@@ -174,6 +185,7 @@ export async function boot(): Promise<void> {
       );
     }
     state.me = profile;
+    state.read = loadRead(profile.id);
     if (profile.role === "pending") {
       state.screen = "pending";
       render();
@@ -236,6 +248,10 @@ function askConfirm(options: ConfirmOptions): Promise<boolean> {
     dialog.addEventListener("close", () => resolve(dialog.returnValue === "ok"), { once: true });
     dialog.showModal();
   });
+}
+
+function confirmDelete(subject: string, title: string, message: string): Promise<boolean> {
+  return askConfirm({ title, subject, message, confirmLabel: "Excluir", tone: "danger" });
 }
 
 function confirmDone(kind: "tarefa" | "subtarefa", title: string): Promise<boolean> {
@@ -303,6 +319,10 @@ async function refreshChat(forceScroll = false): Promise<void> {
   }
   const changed = signature(fresh) !== signature(state.comments);
   state.comments = fresh;
+  markSeen(state.read, taskId, fresh.length); // conversa aberta: tudo o que chega já está visto
+  if (state.me) {
+    saveRead(state.me.id, state.read);
+  }
   const task = state.tasks.find((t) => t.id === taskId);
   if (task && task.comment_count !== fresh.length) {
     task.comment_count = fresh.length;
@@ -326,6 +346,39 @@ function startChatPolling(): void {
       // falha de rede momentânea: tenta de novo no próximo ciclo
     });
   }, CHAT_POLL_MS);
+}
+
+// ---------- atualização em segundo plano ----------
+
+const BACKGROUND_REFRESH_MS = 60_000;
+
+/** Só atualiza quando não atrapalha: aba visível, sem diálogo aberto e sem digitação em curso. */
+async function backgroundRefresh(): Promise<void> {
+  if (state.screen !== "main" || document.hidden || state.chatTaskId !== null) {
+    return;
+  }
+  const typing = document.activeElement;
+  if (
+    typing instanceof HTMLInputElement ||
+    typing instanceof HTMLTextAreaElement ||
+    typing instanceof HTMLSelectElement
+  ) {
+    return;
+  }
+  for (const id of ["dialog", "confirm"]) {
+    if ((document.getElementById(id) as HTMLDialogElement | null)?.open) {
+      return;
+    }
+  }
+  try {
+    const before = JSON.stringify(state.tasks);
+    await loadTasks();
+    if (JSON.stringify(state.tasks) !== before) {
+      renderContent();
+    }
+  } catch {
+    // sem rede ou sessão expirada: tenta de novo no próximo ciclo
+  }
 }
 
 // ---------- ações ----------
@@ -433,7 +486,7 @@ const actions: Record<string, Handler> = {
   },
 
   "toggle-all": () => {
-    const visible = filterTasks(state.tasks, state.filters, todayISO());
+    const visible = currentTaskList();
     const allOpen = visible.every((t) => state.openTasks.has(t.id));
     for (const task of visible) {
       if (allOpen) {
@@ -442,6 +495,11 @@ const actions: Record<string, Handler> = {
         state.openTasks.add(task.id);
       }
     }
+    renderContent();
+  },
+
+  "set-list": (el) => {
+    state.taskList = el.dataset["list"] === "archived" ? "archived" : "active";
     renderContent();
   },
 
@@ -469,8 +527,17 @@ const actions: Record<string, Handler> = {
       if (!task) {
         return;
       }
-      const extra = task.subtasks.length > 0 ? ` e suas ${task.subtasks.length} subtarefas` : "";
-      if (!confirm(`Excluir a tarefa "${task.title}"${extra}? Esta ação não pode ser desfeita.`)) {
+      const extra =
+        task.subtasks.length > 0
+          ? ` As ${task.subtasks.length} subtarefas dela também serão excluídas.`
+          : "";
+      if (
+        !(await confirmDelete(
+          task.title,
+          "Excluir tarefa?",
+          `Esta ação não pode ser desfeita.${extra}`,
+        ))
+      ) {
         return;
       }
       await api.deleteTask(task.id);
@@ -493,7 +560,13 @@ const actions: Record<string, Handler> = {
       if (!subtask) {
         return;
       }
-      if (!confirm(`Excluir a subtarefa "${subtask.title}"?`)) {
+      if (
+        !(await confirmDelete(
+          subtask.title,
+          "Excluir subtarefa?",
+          "Esta ação não pode ser desfeita.",
+        ))
+      ) {
         return;
       }
       await api.deleteSubtask(subtask.id);
@@ -539,9 +612,11 @@ const actions: Record<string, Handler> = {
       }
       const label = person.name || person.email;
       if (
-        !confirm(
-          `Excluir o usuário "${label}"? O acesso dele é removido e as tarefas atribuídas a ele ficam sem responsável. Esta ação não pode ser desfeita.`,
-        )
+        !(await confirmDelete(
+          label,
+          "Excluir usuário?",
+          "O acesso dele é removido e as tarefas atribuídas a ele ficam sem responsável. Esta ação não pode ser desfeita.",
+        ))
       ) {
         return;
       }
@@ -559,6 +634,8 @@ const actions: Record<string, Handler> = {
       }
       state.chatTaskId = task.id;
       state.comments = await api.fetchComments(task.id);
+      markSeen(state.read, task.id, state.comments.length);
+      saveRead(currentUser().id, state.read);
       openDialog(commentsDialog(task, state.comments));
       scrollChatToEnd();
       startChatPolling();
@@ -566,7 +643,17 @@ const actions: Record<string, Handler> = {
 
   "delete-comment": (el) =>
     run(async () => {
-      if (!confirm("Apagar este comentário?")) {
+      const comment = state.comments.find((c) => c.id === el.dataset["id"]);
+      const excerpt = comment ? comment.body.slice(0, 80) : "";
+      if (
+        !(await askConfirm({
+          title: "Apagar comentário?",
+          subject: excerpt,
+          message: "Esta ação não pode ser desfeita.",
+          confirmLabel: "Apagar",
+          tone: "danger",
+        }))
+      ) {
         return;
       }
       await api.deleteComment(el.dataset["id"] ?? "");
@@ -715,6 +802,7 @@ async function submitComment(form: HTMLFormElement): Promise<void> {
     return;
   }
   await api.addComment(taskId, body);
+  markMine(state.read, taskId);
   form.reset();
   await refreshChat(true);
 }
@@ -792,7 +880,22 @@ export function bindEvents(): void {
     }
   });
 
-  byId("dialog").addEventListener("close", stopChatPolling);
+  // Ao fechar a conversa, o aviso de "novos" do topo é atualizado.
+  byId("dialog").addEventListener("close", () => {
+    const wasChat = state.chatTaskId !== null;
+    stopChatPolling();
+    if (wasChat && state.screen === "main") {
+      renderContent();
+    }
+  });
+
+  // Atualização em segundo plano: traz comentários novos de outras pessoas sem recarregar a página.
+  setInterval(() => void backgroundRefresh(), BACKGROUND_REFRESH_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      void backgroundRefresh();
+    }
+  });
 
   document.addEventListener("click", (event) => {
     const el = (event.target as Element).closest<HTMLElement>("[data-action]");
