@@ -128,12 +128,15 @@ function scrollGanttToToday(): void {
 // ---------- carga de dados ----------
 
 async function loadTasks(): Promise<void> {
-  state.tasks = await api.fetchTasks();
+  const { tasks, extras } = await api.fetchTasks();
+  state.tasks = tasks;
+  state.extras = extras;
 }
 
 async function loadAll(): Promise<void> {
-  const [tasks, profiles] = await Promise.all([api.fetchTasks(), api.fetchProfiles()]);
-  state.tasks = tasks;
+  const [loaded, profiles] = await Promise.all([api.fetchTasks(), api.fetchProfiles()]);
+  state.tasks = loaded.tasks;
+  state.extras = loaded.extras;
   state.profiles = profiles;
 }
 
@@ -169,6 +172,11 @@ export async function boot(): Promise<void> {
     }
     state.screen = "main";
     render();
+    if (!state.extras) {
+      toast(
+        "Comentários e links indisponíveis: execute supabase/002_comments_links.sql no Supabase.",
+      );
+    }
   } catch (error) {
     state.screen = "login";
     render();

@@ -212,7 +212,7 @@ describe("links and comments", () => {
   it("shows the comment count and safe links; unsafe URLs are never anchors", () => {
     withLinks();
     const out = tasksView().value;
-    expect(out).toContain('data-action="open-comments" data-id="t1"');
+    expect(out).toMatch(/data-action="open-comments"\s+data-id="t1"/);
     expect(out).toMatch(/count-pill">3</);
     expect(out).toContain('href="https://exemplo.com/p"');
     expect(out).toContain('rel="noopener noreferrer"');
@@ -301,5 +301,15 @@ describe("assignee filter includes subtask assignees", () => {
     expect(out).toContain("Sem datas"); // t2 aparece
     expect(out).toContain("Parte da Ana");
     state.filters = { ...state.filters, assignee: "all" };
+  });
+});
+
+describe("without the comments/links migration", () => {
+  it("hides the comment button and link area", () => {
+    state.extras = false;
+    const out = tasksView().value;
+    state.extras = true;
+    expect(out).not.toContain("open-comments");
+    expect(out).not.toContain("add-link");
   });
 });

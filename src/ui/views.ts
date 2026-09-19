@@ -424,9 +424,19 @@ function taskCard(me: Profile, task: Task): Safe {
         </div>
       </div>
       <div class="card-actions">
-        <button class="btn small" type="button" data-action="open-comments" data-id="${task.id}">
-          Comentários${task.comment_count > 0 && html` <span class="count-pill">${task.comment_count}</span>`}
-        </button>
+        ${
+          state.extras &&
+          html`<button
+            class="btn small"
+            type="button"
+            data-action="open-comments"
+            data-id="${task.id}"
+          >
+            Comentários${
+              task.comment_count > 0 && html` <span class="count-pill">${task.comment_count}</span>`
+            }
+          </button>`
+        }
         ${
           canEdit &&
           html`<button class="btn small" type="button" data-action="edit-task" data-id="${task.id}">
@@ -448,6 +458,7 @@ function taskCard(me: Profile, task: Task): Safe {
     </header>
     ${task.description && html`<p class="desc">${linkify(task.description)}</p>`}
     ${
+      state.extras &&
       (task.links.length > 0 || canManageLinks(me, task)) &&
       html`<div class="links">
         ${task.links.map((link) => linkChip(link, canManageLinks(me, task)))}

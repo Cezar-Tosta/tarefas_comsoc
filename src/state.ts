@@ -12,6 +12,8 @@ export interface State {
   me: Profile | null;
   profiles: Profile[];
   tasks: Task[];
+  /** Comentários e links disponíveis (migração 002 aplicada no banco). */
+  extras: boolean;
   view: View;
   filters: Filters;
   zoom: Zoom;
@@ -32,6 +34,7 @@ export const state: State = {
   me: null,
   profiles: [],
   tasks: [],
+  extras: true,
   view: "tasks",
   filters: { ...DEFAULT_FILTERS },
   zoom: "week",

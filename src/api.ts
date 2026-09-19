@@ -85,31 +85,40 @@ export async function fetchProfiles(): Promise<Profile[]> {
   return (data ?? []) as Profile[];
 }
 
-export async function fetchTasks(): Promise<Task[]> {
-  const { data, error } = await db()
-    .from("tasks")
-    .select("*, subtasks(*), task_links(*), comments(count)");
-  check(error);
+/** `extras` é false quando a migração 002 (comentários e links) ainda não foi executada. */
+export async function fetchTasks(): Promise<{ tasks: Task[]; extras: boolean }> {
+  const full = await db().from("tasks").select("*, subtasks(*), task_links(*), comments(count)");
+  let extras = true;
+  let data: unknown[] | null = full.data;
+  if (full.error) {
+    if (full.error.code !== "PGRST200") {
+      throw new Error(full.error.message);
+    }
+    extras = false;
+    const base = await db().from("tasks").select("*, subtasks(*)");
+    check(base.error);
+    data = base.data;
+  }
   const rows = (data ?? []) as (Omit<Task, "links" | "comment_count"> & {
-    task_links: TaskLink[];
-    comments: { count: number }[];
+    task_links?: TaskLink[];
+    comments?: { count: number }[];
   })[];
   const tasks: Task[] = [];
-  for (const { task_links, comments, ...rest } of rows) {
+  for (const { task_links = [], comments = [], ...rest } of rows) {
     tasks.push({
       ...rest,
-      links: task_links.toSorted((a, b) => a.created_at.localeCompare(b.created_at)),
+      links: task_links.toSorted((x, y) => x.created_at.localeCompare(y.created_at)),
       comment_count: comments[0]?.count ?? 0,
     });
   }
   for (const task of tasks) {
-    task.subtasks.sort((a, b) => a.position - b.position);
+    task.subtasks.sort((x, y) => x.position - y.position);
   }
-  tasks.sort((a, b) => {
-    const byStart = (a.start_date ?? "9999-12-31").localeCompare(b.start_date ?? "9999-12-31");
-    return byStart === 0 ? a.title.localeCompare(b.title, "pt-BR") : byStart;
+  tasks.sort((x, y) => {
+    const byStart = (x.start_date ?? "9999-12-31").localeCompare(y.start_date ?? "9999-12-31");
+    return byStart === 0 ? x.title.localeCompare(y.title, "pt-BR") : byStart;
   });
-  return tasks;
+  return { tasks, extras };
 }
 
 // ---------- escrita ----------
