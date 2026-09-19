@@ -25,6 +25,8 @@ export interface State {
   comments: Comment[];
   /** Tarefas cujo grupo "Concluídas" está aberto. */
   openDone: Set<string>;
+  /** Tarefas expandidas na aba Tarefas (por padrão todas aparecem encolhidas). */
+  openTasks: Set<string>;
   /** Relatórios (por pessoa) com o detalhamento aberto. */
   openReports: Set<string>;
 }
@@ -45,6 +47,7 @@ export const state: State = {
   chatTaskId: null,
   comments: [],
   openDone: new Set(),
+  openTasks: new Set(),
   openReports: new Set(),
 };
 

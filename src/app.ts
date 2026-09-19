@@ -99,7 +99,7 @@ export function render(): void {
         byId("toolbar"),
         state.view === "users" || state.view === "reports"
           ? html``
-          : toolbarView(state.view !== "gantt"),
+          : toolbarView(state.view === "gantt" ? "gantt" : "tasks"),
       );
       renderContent();
       return;
@@ -108,7 +108,10 @@ export function render(): void {
 
 /** Atualiza resumo e conteúdo sem recriar a barra de filtros (preserva foco ao digitar). */
 function renderContent(): void {
-  mount(byId("summary"), state.view === "gantt" ? html`` : summaryView(todayISO()));
+  mount(
+    byId("summary"),
+    state.view === "gantt" || state.view === "users" ? html`` : summaryView(todayISO()),
+  );
   let content: Safe;
   if (state.view === "gantt") {
     content = ganttView();
@@ -366,6 +369,32 @@ const actions: Record<string, Handler> = {
   },
 
   "new-task": () => openDialog(taskDialog(null)),
+
+  "toggle-task": (el) => {
+    const id = el.dataset["id"];
+    if (!id) {
+      return;
+    }
+    if (state.openTasks.has(id)) {
+      state.openTasks.delete(id);
+    } else {
+      state.openTasks.add(id);
+    }
+    renderContent();
+  },
+
+  "toggle-all": () => {
+    const visible = filterTasks(state.tasks, state.filters, todayISO());
+    const allOpen = visible.every((t) => state.openTasks.has(t.id));
+    for (const task of visible) {
+      if (allOpen) {
+        state.openTasks.delete(task.id);
+      } else {
+        state.openTasks.add(task.id);
+      }
+    }
+    renderContent();
+  },
 
   "edit-task": (el) => {
     const task = state.tasks.find((t) => t.id === el.dataset["id"]);

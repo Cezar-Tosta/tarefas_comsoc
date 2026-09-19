@@ -79,6 +79,7 @@ function as(me: Profile): void {
   state.profiles = [admin, ana, bia, vera];
   state.tasks = makeTasks();
   state.openDone = new Set();
+  state.openTasks = new Set(["t1", "t2"]);
 }
 
 beforeEach(() => as(admin));
@@ -195,6 +196,14 @@ describe("usersView", () => {
     expect(out).toMatch(/data-action="edit-user"\s+data-id="a"[^>]*disabled/);
     expect(out).toMatch(/data-action="delete-user"\s+data-id="a"[^>]*disabled/);
     expect(out).not.toMatch(/data-action="edit-user"\s+data-id="u1"[^>]*disabled/);
+  });
+
+  it("summarises how many users there are and of which types", () => {
+    const out = usersView().value;
+    expect(out).toContain('class="user-info"');
+    expect(out).toContain("<strong>4</strong> usuários cadastrados");
+    expect(out).toMatch(/role-admin">Administrador<\/span> <b>1<\/b>/);
+    expect(out).toMatch(/role-user">Usuário<\/span> <b>2<\/b>/);
   });
 
   it("edits name and role in a dialog", () => {
@@ -389,14 +398,48 @@ describe("summary metrics per profile", () => {
   });
 });
 
+describe("collapsible task cards", () => {
+  it("shows only the title while collapsed", () => {
+    state.openTasks = new Set();
+    const out = tasksView().value;
+    expect(out).toContain("is-collapsed");
+    expect(out).toMatch(/data-action="toggle-task"\s+data-id="t1"\s+aria-expanded="false"/);
+    expect(out).not.toContain("Coletar dados");
+    expect(out).not.toContain('data-action="edit-task"');
+    expect(out).not.toContain("Prioridade");
+  });
+
+  it("opens one card at a time and keeps done subtasks collapsed", () => {
+    state.openTasks = new Set(["t1"]);
+    const out = tasksView().value;
+    expect(out).toMatch(/data-id="t1"\s+aria-expanded="true"/);
+    expect(out).toMatch(/data-id="t2"\s+aria-expanded="false"/);
+    expect(out).toMatch(/<details\s+class="done-group"[^>]*>/);
+    expect(out).not.toMatch(/<details[^>]*\sopen/);
+  });
+
+  it("has an expand/collapse-all switch that reflects the state", () => {
+    state.openTasks = new Set();
+    expect(tasksView().value).toMatch(/role="switch"[^>]*aria-checked="false"/);
+    state.openTasks = new Set(["t1", "t2"]);
+    expect(tasksView().value).toMatch(/role="switch"[^>]*aria-checked="true"/);
+  });
+});
+
 describe("gantt toolbar", () => {
   it("keeps only the filters: no new task, export or refresh", () => {
-    const out = toolbarView(false).value;
+    const out = toolbarView("gantt").value;
     expect(out).toContain('data-filter="q"');
     expect(out).toContain('data-filter="status"');
     expect(out).not.toContain('data-action="new-task"');
     expect(out).not.toContain('data-action="export-csv"');
     expect(out).not.toContain('data-action="refresh"');
+    expect(out).not.toContain('data-filter="hideDone"');
+  });
+
+  it("puts hide-done next to show-subtasks in the Gantt controls", () => {
+    const out = ganttView().value;
+    expect(out).toMatch(/data-pref="showSubtasks"[\s\S]*data-filter="hideDone"/);
   });
 });
 

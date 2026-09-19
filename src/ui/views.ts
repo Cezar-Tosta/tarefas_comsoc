@@ -234,11 +234,15 @@ export function summaryView(today: string): Safe {
     </div>`;
 }
 
-/** `actions`: mostra "Nova tarefa", "Exportar CSV" e "Atualizar" (a aba Gantt só tem os filtros). */
-export function toolbarView(actions = true): Safe {
+/**
+ * Na aba Gantt (`mode = "gantt"`) só há os filtros básicos: sem "Nova tarefa", "Exportar CSV" e
+ * "Atualizar", e "Ocultar concluídas" fica junto dos controles do próprio Gantt.
+ */
+export function toolbarView(mode: "tasks" | "gantt" = "tasks"): Safe {
   const me = currentUser();
   const f = state.filters;
-  const active = activeFilterCount(f);
+  const gantt = mode === "gantt";
+  const active = activeFilterCount(f, !gantt);
   return html`<div class="toolbar">
     <div class="toolbar-top">
       <label class="field grow"
@@ -254,7 +258,7 @@ export function toolbarView(actions = true): Safe {
         class="btn filters-toggle"
         type="button"
         data-action="toggle-filters"
-        aria-expanded="${state.filtersOpen}"
+        aria-expanded="${String(state.filtersOpen)}"
         aria-controls="filters-panel"
       >
         Filtros${active > 0 && html` <span class="count-pill">${active}</span>`}
@@ -290,14 +294,17 @@ export function toolbarView(actions = true): Safe {
         >Até
         <input type="date" data-filter="to" value="${f.to}" />
       </label>
-      <label class="check">
-        <input type="checkbox" data-filter="hideDone" ${f.hideDone && raw("checked")} />
-        Ocultar concluídas
-      </label>
+      ${
+        !gantt &&
+        html`<label class="check">
+          <input type="checkbox" data-filter="hideDone" ${f.hideDone && raw("checked")} />
+          Ocultar concluídas
+        </label>`
+      }
       <button class="btn small" type="button" data-action="reset-filters">Limpar filtros</button>
     </div>
     ${
-      actions &&
+      !gantt &&
       html`<div class="toolbar-actions">
         ${
           canCreateTask(me) &&
@@ -315,7 +322,7 @@ export function toolbarView(actions = true): Safe {
 }
 
 /** Quantos filtros (além da busca) estão ativos: aparece no botão "Filtros" do celular. */
-function activeFilterCount(f: typeof state.filters): number {
+function activeFilterCount(f: typeof state.filters, withHideDone: boolean): number {
   let count = 0;
   for (const changed of [
     f.status !== "all",
@@ -323,7 +330,7 @@ function activeFilterCount(f: typeof state.filters): number {
     f.priority !== "all",
     f.from !== "",
     f.to !== "",
-    f.hideDone,
+    withHideDone && f.hideDone,
   ]) {
     if (changed) {
       count++;
@@ -435,10 +442,27 @@ function taskCard(me: Profile, task: Task): Safe {
   const showDoneGroup = done.length > 0 && !state.filters.hideDone;
   const canEdit = canEditTask(me, task);
   const canAddSub = canManageSubtasks(me, task);
+  const expanded = state.openTasks.has(task.id);
+  const title = html`<h2>
+    <button
+      class="card-toggle"
+      type="button"
+      data-action="toggle-task"
+      data-id="${task.id}"
+      aria-expanded="${String(expanded)}"
+    >
+      <span class="chevron" aria-hidden="true"></span><span>${task.title}</span>
+    </button>
+  </h2>`;
+  if (!expanded) {
+    return html`<article class="card is-collapsed status-${status} ${late && "is-late"}">
+      ${title}
+    </article>`;
+  }
   return html`<article class="card status-${status} ${late && "is-late"}">
     <header class="card-head">
       <div class="card-title">
-        <h2>${task.title}</h2>
+        ${title}
         <div class="badges">
           <span class="badge st-${status}">${STATUS_LABEL[status]}</span>
           <span class="badge pr-${task.priority}"
@@ -552,7 +576,27 @@ export function tasksView(): Safe {
   if (state.tasks.length === 0) {
     return html`<p class="empty">${emptyMessage(me)}</p>`;
   }
-  return html`<p class="count">${visible.length} de ${state.tasks.length} tarefas</p>
+  const allOpen = visible.length > 0 && visible.every((t) => state.openTasks.has(t.id));
+  return html`<div class="tasks-bar">
+      <p class="count">${visible.length} de ${state.tasks.length} tarefas</p>
+      ${
+        visible.length > 0 &&
+        html`<div class="switch-row">
+          <span class="${!allOpen && "on"}">Encolher tudo</span>
+          <button
+            class="switch"
+            type="button"
+            role="switch"
+            data-action="toggle-all"
+            aria-checked="${String(allOpen)}"
+            aria-label="Expandir todas as tarefas"
+          >
+            <span class="switch-knob"></span>
+          </button>
+          <span class="${allOpen && "on"}">Expandir tudo</span>
+        </div>`
+      }
+    </div>
     ${
       visible.length === 0
         ? html`<p class="empty">Nenhuma tarefa corresponde aos filtros.</p>`
@@ -600,6 +644,10 @@ export function ganttView(): Safe {
     <label class="check">
       <input type="checkbox" data-pref="showSubtasks" ${state.showSubtasks && raw("checked")} />
       Mostrar subtarefas
+    </label>
+    <label class="check">
+      <input type="checkbox" data-filter="hideDone" ${state.filters.hideDone && raw("checked")} />
+      Ocultar concluídas
     </label>
     <button class="btn small" type="button" data-action="scroll-today">Hoje</button>
     <span class="legend">
@@ -710,13 +758,23 @@ function undatedNote(undated: Task[]): Safe {
 
 export function usersView(): Safe {
   const me = currentUser();
-  const pending = state.profiles.filter((p) => p.role === "pending").length;
-  return html`${
-    pending > 0 &&
-    html`<p class="notice">
+  const counts = new Map(ROLES.map((r) => [r, state.profiles.filter((p) => p.role === r).length]));
+  const pending = counts.get("pending") ?? 0;
+  return html`<section class="user-info" aria-label="Sobre os usuários">
+      <p class="user-total"><strong>${state.profiles.length}</strong> usuários cadastrados</p>
+      <ul class="user-roles">
+        ${ROLES.map(
+          (r) =>
+            html`<li><span class="badge role-${r}">${ROLE_LABEL[r]}</span> <b>${counts.get(r) ?? 0}</b></li>`,
+        )}
+      </ul>
+    </section>
+    ${
+      pending > 0 &&
+      html`<p class="notice">
         ${pending} conta(s) aguardando aprovação. Defina um perfil para liberar o acesso.
       </p>`
-  }
+    }
     <div class="table-wrap">
       <table class="users-table">
         <thead>
