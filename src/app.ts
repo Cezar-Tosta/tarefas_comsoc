@@ -16,6 +16,7 @@ import {
   linkDialog,
   loginView,
   pendingView,
+  reportPeopleIds,
   reportsView,
   setupView,
   shellView,
@@ -186,7 +187,9 @@ export async function boot(): Promise<void> {
       state.view = "tasks";
     }
     if (profile.role === "user") {
-      state.openReports.add(profile.id); // o usuário já vê o próprio detalhamento aberto
+      // o usuário já vê o próprio relatório e o detalhamento abertos
+      state.openPeople.add(profile.id);
+      state.openReports.add(profile.id);
     }
     state.screen = "main";
     render();
@@ -379,6 +382,32 @@ const actions: Record<string, Handler> = {
       state.openTasks.delete(id);
     } else {
       state.openTasks.add(id);
+    }
+    renderContent();
+  },
+
+  "toggle-person": (el) => {
+    const id = el.dataset["id"];
+    if (!id) {
+      return;
+    }
+    if (state.openPeople.has(id)) {
+      state.openPeople.delete(id);
+    } else {
+      state.openPeople.add(id);
+    }
+    renderContent();
+  },
+
+  "toggle-all-people": () => {
+    const ids = reportPeopleIds();
+    const allOpen = ids.every((id) => state.openPeople.has(id));
+    for (const id of ids) {
+      if (allOpen) {
+        state.openPeople.delete(id);
+      } else {
+        state.openPeople.add(id);
+      }
     }
     renderContent();
   },

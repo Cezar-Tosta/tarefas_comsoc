@@ -2085,8 +2085,17 @@ svg .pie-empty {
   cursor: pointer;
 }
 
-.card-toggle > span:last-child {
+.card-toggle {
+  flex-wrap: wrap;
+}
+
+.card-toggle > span:nth-child(2) {
   overflow-wrap: anywhere;
+}
+
+.card-toggle .deadline {
+  font-size: 11px;
+  padding: 1px 8px;
 }
 
 .chevron {
@@ -2137,4 +2146,47 @@ svg .pie-empty {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 16px;
+}
+
+/* ---------- relatório encolhido e pizza de perfis ---------- */
+
+.report.is-collapsed {
+  padding: 10px 14px;
+}
+
+.report.is-collapsed h2 {
+  font-size: 15px;
+}
+
+.tasks-bar > .muted {
+  margin: 0;
+}
+
+.pie-admin {
+  --pc: var(--accent);
+}
+
+.pie-user {
+  --pc: var(--st-doing);
+}
+
+.pie-viewer {
+  --pc: var(--st-todo);
+}
+
+.pie-pending {
+  --pc: var(--st-blocked);
+}
+
+svg .pie-admin,
+svg .pie-user,
+svg .pie-viewer,
+svg .pie-pending {
+  fill: var(--pc);
+  stroke: var(--surface);
+  stroke-width: 1;
+}
+
+.user-info .pie {
+  min-width: 200px;
 }

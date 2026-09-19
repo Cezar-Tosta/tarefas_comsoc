@@ -27,6 +27,8 @@ export interface State {
   openDone: Set<string>;
   /** Tarefas expandidas na aba Tarefas (por padrão todas aparecem encolhidas). */
   openTasks: Set<string>;
+  /** Relatórios (por pessoa) expandidos na aba Relatório (por padrão todos encolhidos). */
+  openPeople: Set<string>;
   /** Relatórios (por pessoa) com o detalhamento aberto. */
   openReports: Set<string>;
 }
@@ -48,6 +50,7 @@ export const state: State = {
   comments: [],
   openDone: new Set(),
   openTasks: new Set(),
+  openPeople: new Set(),
   openReports: new Set(),
 };
 

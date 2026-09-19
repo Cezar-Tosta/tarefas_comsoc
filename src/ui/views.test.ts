@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { state } from "../state";
 import type { Profile, Task } from "../types";
 import {
@@ -8,6 +8,7 @@ import {
   linkDialog,
   loginView,
   pendingView,
+  reportPeopleIds,
   reportsView,
   shellView,
   summaryView,
@@ -80,6 +81,7 @@ function as(me: Profile): void {
   state.tasks = makeTasks();
   state.openDone = new Set();
   state.openTasks = new Set(["t1", "t2"]);
+  state.openPeople = new Set(["a", "u1", "u2", "__unassigned__"]);
 }
 
 beforeEach(() => as(admin));
@@ -202,8 +204,9 @@ describe("usersView", () => {
     const out = usersView().value;
     expect(out).toContain('class="user-info"');
     expect(out).toContain("<strong>4</strong> usuários cadastrados");
-    expect(out).toMatch(/role-admin">Administrador<\/span> <b>1<\/b>/);
-    expect(out).toMatch(/role-user">Usuário<\/span> <b>2<\/b>/);
+    expect(out).toContain('class="pie"');
+    expect(out).toMatch(/pie-admin"[^>]*><\/i>Administrador\s*<b>1<\/b>/);
+    expect(out).toMatch(/pie-user"[^>]*><\/i>Usuário\s*<b>2<\/b>/);
   });
 
   it("edits name and role in a dialog", () => {
@@ -426,6 +429,27 @@ describe("collapsible task cards", () => {
   });
 });
 
+describe("task deadline countdown", () => {
+  // t1 termina em 2026-09-30; o teste fixa "hoje" via fake timers
+  it("shows how many days remain next to the title, even when collapsed", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 8, 27, 12));
+    state.openTasks = new Set();
+    expect(tasksView().value).toMatch(/dl-soon">Faltam 3 dias</);
+    vi.setSystemTime(new Date(2026, 8, 30, 12));
+    expect(tasksView().value).toMatch(/dl-today">HOJE</);
+    vi.setSystemTime(new Date(2026, 9, 2, 12));
+    expect(tasksView().value).toMatch(/dl-overdue">Atrasada há 2 dias</);
+    vi.useRealTimers();
+  });
+
+  it("shows nothing for tasks without an end date", () => {
+    state.openTasks = new Set();
+    state.tasks = state.tasks.filter((t) => t.id === "t2");
+    expect(tasksView().value).not.toContain("deadline");
+  });
+});
+
 describe("gantt toolbar", () => {
   it("keeps only the filters: no new task, export or refresh", () => {
     const out = toolbarView("gantt").value;
@@ -440,6 +464,29 @@ describe("gantt toolbar", () => {
   it("puts hide-done next to show-subtasks in the Gantt controls", () => {
     const out = ganttView().value;
     expect(out).toMatch(/data-pref="showSubtasks"[\s\S]*data-filter="hideDone"/);
+  });
+});
+
+describe("collapsible reports", () => {
+  it("shows only the person's name while collapsed", () => {
+    state.openPeople = new Set();
+    const out = reportsView().value;
+    expect(out).toContain("report is-collapsed");
+    expect(out).toMatch(/data-action="toggle-person"\s+data-id="u1"\s+aria-expanded="false"/);
+    expect(out).not.toContain("Maior atraso");
+    expect(out).not.toContain('class="pie"');
+  });
+
+  it("expands a single person and has an expand/collapse-all switch", () => {
+    state.openPeople = new Set(["u1"]);
+    const out = reportsView().value;
+    expect(out).toMatch(/data-id="u1"\s+aria-expanded="true"/);
+    expect(out).toMatch(/data-action="toggle-all-people"[^>]*aria-checked="false"/);
+    expect(out).toContain("Maior atraso");
+  });
+
+  it("lists the ids shown so the switch can act on all of them", () => {
+    expect(reportPeopleIds()).toEqual(expect.arrayContaining(["a", "u1", "u2"]));
   });
 });
 
@@ -463,7 +510,7 @@ describe("reports tab", () => {
     const out = reportsView().value;
     expect(out).toContain("Andamento por pessoa");
     for (const name of ["Ada", "Ana", "Bia"]) {
-      expect(out).toContain(`<h2>${name}</h2>`);
+      expect(out).toContain(`<span>${name}</span>`);
     }
     expect(out).toContain("Maior atraso");
     expect(out).toContain("Próximo prazo");
@@ -476,9 +523,9 @@ describe("reports tab", () => {
     state.openReports = new Set(["u1"]);
     const out = reportsView().value;
     expect(out).toContain("Como estão as suas tarefas e subtarefas");
-    expect(out).toContain("<h2>Ana</h2>");
-    expect(out).not.toContain("<h2>Bia</h2>");
-    expect(out).not.toContain("<h2>Ada</h2>");
+    expect(out).toContain("<span>Ana</span>");
+    expect(out).not.toContain("<span>Bia</span>");
+    expect(out).not.toContain("<span>Ada</span>");
     expect(out).toMatch(/<details\s+class="report-details"[^>]*\sopen/);
     expect(out).toContain("Escrever"); // subtarefa atribuída a ela
     state.openReports = new Set();

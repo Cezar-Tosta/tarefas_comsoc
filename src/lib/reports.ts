@@ -46,6 +46,21 @@ export function deadlineLabel(deadline: Deadline): string {
   }
 }
 
+/** Texto curto ao lado do título da tarefa: dias que faltam, dias de atraso ou "HOJE". */
+export function deadlineCountdown(deadline: Deadline): string | null {
+  switch (deadline.kind) {
+    case "done":
+    case "none":
+      return null;
+    case "today":
+      return "HOJE";
+    case "overdue":
+      return `Atrasada há ${plural(deadline.days, "dia", "dias")}`;
+    case "upcoming":
+      return `${deadline.days === 1 ? "Falta" : "Faltam"} ${plural(deadline.days, "dia", "dias")}`;
+  }
+}
+
 export const UNASSIGNED = "__unassigned__";
 
 export interface ReportPerson {

@@ -9,6 +9,9 @@ import { percentOf, pieShapes } from "../lib/pie";
 import {
   buildPersonReport,
   buildTeamReport,
+  type Deadline,
+  deadlineCountdown,
+  deadlineInfo,
   deadlineLabel,
   type PersonReport,
   type ReportLine,
@@ -434,6 +437,56 @@ function linkChip(link: TaskLink, removable: boolean): Safe {
   </span>`;
 }
 
+/** Interruptor "Encolher tudo / Expandir tudo" das abas Tarefas e Relatório. */
+function expandSwitch(action: string, allOpen: boolean, label: string): Safe {
+  return html`<div class="switch-row">
+    <span class="${!allOpen && "on"}">Encolher tudo</span>
+    <button
+      class="switch"
+      type="button"
+      role="switch"
+      data-action="${action}"
+      aria-checked="${String(allOpen)}"
+      aria-label="${label}"
+    >
+      <span class="switch-knob"></span>
+    </button>
+    <span class="${allOpen && "on"}">Expandir tudo</span>
+  </div>`;
+}
+
+/** Título clicável de um card encolhível. */
+function cardTitle(
+  action: string,
+  id: string,
+  expanded: boolean,
+  text: string,
+  extra: Safe | false = false,
+): Safe {
+  return html`<h2>
+    <button
+      class="card-toggle"
+      type="button"
+      data-action="${action}"
+      data-id="${id}"
+      aria-expanded="${String(expanded)}"
+    >
+      <span class="chevron" aria-hidden="true"></span><span>${text}</span>${extra}
+    </button>
+  </h2>`;
+}
+
+/** "Faltam 3 dias" / "Atrasada há 2 dias" / "HOJE", com a cor da urgência. */
+function countdownChip(deadline: Deadline): Safe | false {
+  const text = deadlineCountdown(deadline);
+  if (text === null) {
+    return false;
+  }
+  const { kind, days } = deadline;
+  const tone = kind === "upcoming" && days <= 3 ? "soon" : kind;
+  return html`<span class="deadline dl-${tone}">${text}</span>`;
+}
+
 function taskCard(me: Profile, task: Task): Safe {
   const status = effectiveStatus(task);
   const percent = taskProgress(task);
@@ -443,17 +496,8 @@ function taskCard(me: Profile, task: Task): Safe {
   const canEdit = canEditTask(me, task);
   const canAddSub = canManageSubtasks(me, task);
   const expanded = state.openTasks.has(task.id);
-  const title = html`<h2>
-    <button
-      class="card-toggle"
-      type="button"
-      data-action="toggle-task"
-      data-id="${task.id}"
-      aria-expanded="${String(expanded)}"
-    >
-      <span class="chevron" aria-hidden="true"></span><span>${task.title}</span>
-    </button>
-  </h2>`;
+  const chip = countdownChip(deadlineInfo(task.end_date, status === "done", todayISO()));
+  const title = cardTitle("toggle-task", task.id, expanded, task.title, chip);
   if (!expanded) {
     return html`<article class="card is-collapsed status-${status} ${late && "is-late"}">
       ${title}
@@ -579,23 +623,7 @@ export function tasksView(): Safe {
   const allOpen = visible.length > 0 && visible.every((t) => state.openTasks.has(t.id));
   return html`<div class="tasks-bar">
       <p class="count">${visible.length} de ${state.tasks.length} tarefas</p>
-      ${
-        visible.length > 0 &&
-        html`<div class="switch-row">
-          <span class="${!allOpen && "on"}">Encolher tudo</span>
-          <button
-            class="switch"
-            type="button"
-            role="switch"
-            data-action="toggle-all"
-            aria-checked="${String(allOpen)}"
-            aria-label="Expandir todas as tarefas"
-          >
-            <span class="switch-knob"></span>
-          </button>
-          <span class="${allOpen && "on"}">Expandir tudo</span>
-        </div>`
-      }
+      ${visible.length > 0 && expandSwitch("toggle-all", allOpen, "Expandir todas as tarefas")}
     </div>
     ${
       visible.length === 0
@@ -762,12 +790,10 @@ export function usersView(): Safe {
   const pending = counts.get("pending") ?? 0;
   return html`<section class="user-info" aria-label="Sobre os usuários">
       <p class="user-total"><strong>${state.profiles.length}</strong> usuários cadastrados</p>
-      <ul class="user-roles">
-        ${ROLES.map(
-          (r) =>
-            html`<li><span class="badge role-${r}">${ROLE_LABEL[r]}</span> <b>${counts.get(r) ?? 0}</b></li>`,
-        )}
-      </ul>
+      ${pieChart(
+        "Por perfil",
+        ROLES.map((r) => ({ label: ROLE_LABEL[r], value: counts.get(r) ?? 0, tone: r })),
+      )}
     </section>
     ${
       pending > 0 &&
@@ -1139,10 +1165,13 @@ function reportCard(report: PersonReport): Safe {
       : next.days === 0
         ? "Hoje"
         : `Em ${next.days} ${next.days === 1 ? "dia" : "dias"}`;
+  const expanded = state.openPeople.has(person.id);
+  const title = cardTitle("toggle-person", person.id, expanded, person.name);
+  if (!expanded) {
+    return html`<article class="report is-collapsed">${title}</article>`;
+  }
   return html`<article class="report">
-    <header class="report-head">
-      <h2>${person.name}</h2>
-    </header>
+    <header class="report-head">${title}</header>
     <div class="pies">
       ${pieChart("Tarefas", [
         { label: "A fazer", value: ts.todo, tone: "todo" },
@@ -1189,6 +1218,17 @@ function reportCard(report: PersonReport): Safe {
   </article>`;
 }
 
+function buildReports(me: Profile, today: string): PersonReport[] {
+  return me.role === "admin"
+    ? buildTeamReport(state.profiles, state.tasks, today)
+    : [buildPersonReport({ id: me.id, name: me.name || me.email }, state.tasks, today)];
+}
+
+/** Ids dos relatórios exibidos (para "expandir/encolher tudo"). */
+export function reportPeopleIds(): string[] {
+  return buildReports(currentUser(), todayISO()).map((r) => r.person.id);
+}
+
 export function reportsView(): Safe {
   const me = currentUser();
   if (!canSeeReports(me)) {
@@ -1196,15 +1236,17 @@ export function reportsView(): Safe {
   }
   const today = todayISO();
   const admin = me.role === "admin";
-  const reports = admin
-    ? buildTeamReport(state.profiles, state.tasks, today)
-    : [buildPersonReport({ id: me.id, name: me.name || me.email }, state.tasks, today)];
+  const reports = buildReports(me, today);
+  const allOpen = reports.length > 0 && reports.every((r) => state.openPeople.has(r.person.id));
   const [only] = reports;
   const nothing = !admin && only !== undefined && only.lines.length === 0;
-  return html`<p class="muted small">
-      ${admin ? "Andamento por pessoa, de quem tem mais itens atrasados para quem tem menos." : "Como estão as suas tarefas e subtarefas."}
-      Referência: hoje, ${formatBR(today)}. Subtarefas sem data usam o prazo da tarefa.
-    </p>
+  return html`<div class="tasks-bar">
+      <p class="muted small">
+        ${admin ? "Andamento por pessoa, de quem tem mais itens atrasados para quem tem menos." : "Como estão as suas tarefas e subtarefas."}
+        Referência: hoje, ${formatBR(today)}. Subtarefas sem data usam o prazo da tarefa.
+      </p>
+      ${reports.length > 0 && expandSwitch("toggle-all-people", allOpen, "Expandir todos os relatórios")}
+    </div>
     ${nothing && html`<p class="empty">${emptyMessage(me)}</p>`}
     <div class="reports">${reports.map(reportCard)}</div>`;
 }

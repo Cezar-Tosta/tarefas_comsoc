@@ -4,11 +4,26 @@ import {
   buildPersonReport,
   buildTeamReport,
   deadlineInfo,
+  deadlineCountdown,
   deadlineLabel,
   UNASSIGNED,
 } from "./reports";
 
 const today = "2026-09-19";
+
+describe("deadlineCountdown", () => {
+  it("counts down, counts overdue days and says HOJE on the due date", () => {
+    expect(deadlineCountdown({ kind: "upcoming", days: 3 })).toBe("Faltam 3 dias");
+    expect(deadlineCountdown({ kind: "upcoming", days: 1 })).toBe("Falta 1 dia");
+    expect(deadlineCountdown({ kind: "overdue", days: 2 })).toBe("Atrasada há 2 dias");
+    expect(deadlineCountdown({ kind: "today", days: 0 })).toBe("HOJE");
+  });
+
+  it("shows nothing for finished or undated tasks", () => {
+    expect(deadlineCountdown({ kind: "done", days: 0 })).toBeNull();
+    expect(deadlineCountdown({ kind: "none", days: 0 })).toBeNull();
+  });
+});
 
 describe("deadlineInfo / deadlineLabel", () => {
   it("counts days late, today and days remaining", () => {
