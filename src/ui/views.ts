@@ -14,8 +14,9 @@ import {
   deadlineCountdown,
   deadlineInfo,
   deadlineLabel,
+  type NestedLine,
+  nestLines,
   type PersonReport,
-  type ReportLine,
 } from "../lib/reports";
 import {
   barGeometry,
@@ -821,39 +822,33 @@ export function usersView(): Safe {
             <th>Nome</th>
             <th>E-mail</th>
             <th>Perfil</th>
-            <th class="col-actions">Ações</th>
           </tr>
         </thead>
         <tbody>
           ${state.profiles.map((p) => {
             const self = p.id === me.id;
-            return html`<tr>
-              <td data-label="Nome">${p.name || "—"}${self && html` <span class="chip">você</span>`}</td>
+            const name = p.name || "—";
+            return html`<tr
+              class="${!self && "user-row"}"
+              ${!self && raw(`data-action="edit-user" data-id="${p.id}"`)}
+            >
+              <td data-label="Nome">
+                ${
+                  self
+                    ? html`${name} <span class="chip">você</span>`
+                    : html`<button
+                        class="user-name"
+                        type="button"
+                        data-action="edit-user"
+                        data-id="${p.id}"
+                      >
+                        ${name}
+                      </button>`
+                }
+              </td>
               <td data-label="E-mail">${p.email}</td>
               <td data-label="Perfil">
                 <span class="badge role-${p.role}">${ROLE_LABEL[p.role]}</span>
-              </td>
-              <td data-label="Ações" class="col-actions">
-                <button
-                  class="btn small"
-                  type="button"
-                  data-action="edit-user"
-                  data-id="${p.id}"
-                  aria-label="Editar ${p.name || p.email}"
-                  ${self && raw("disabled")}
-                >
-                  Editar
-                </button>
-                <button
-                  class="btn small danger"
-                  type="button"
-                  data-action="delete-user"
-                  data-id="${p.id}"
-                  aria-label="Excluir ${p.name || p.email}"
-                  ${self && raw("disabled")}
-                >
-                  Excluir
-                </button>
               </td>
             </tr>`;
           })}
@@ -862,8 +857,8 @@ export function usersView(): Safe {
     </div>
     <p class="muted small">
       <strong>Administrador:</strong> tudo. <strong>Usuário:</strong> edita só o que for atribuído a
-      ele. <strong>Visualizador:</strong> somente consulta. Você não pode alterar nem excluir a
-      própria conta.
+      ele. <strong>Visualizador:</strong> somente consulta. Clique em um usuário para editar ou excluir.
+      Você não pode alterar nem excluir a própria conta.
     </p>`;
 }
 
@@ -883,6 +878,9 @@ export function userDialog(person: Profile): Safe {
     </label>
     <p class="form-error" data-error role="alert"></p>
     <div class="row end">
+      <button class="btn danger push-left" type="button" data-action="delete-user" data-id="${person.id}">
+        Excluir usuário
+      </button>
       <button class="btn" type="button" data-action="close-dialog">Cancelar</button>
       <button class="btn primary" type="submit">Salvar</button>
     </div>
@@ -890,6 +888,32 @@ export function userDialog(person: Profile): Safe {
 }
 
 // ---------- diálogos ----------
+
+export interface ConfirmOptions {
+  title: string;
+  /** Item afetado (nome da tarefa/subtarefa), destacado abaixo do título. */
+  subject: string;
+  message: string;
+  confirmLabel: string;
+}
+
+/** Popup de confirmação: `<form method="dialog">` fecha com returnValue "ok" ou "cancel". */
+export function confirmDialog(options: ConfirmOptions): Safe {
+  return html`<form method="dialog" class="confirm">
+    <span class="confirm-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12.5l4.5 4.5L19 7.5" />
+      </svg>
+    </span>
+    <h2>${options.title}</h2>
+    <p class="confirm-subject">${options.subject}</p>
+    <p class="muted">${options.message}</p>
+    <div class="row end">
+      <button class="btn" type="submit" value="cancel">Cancelar</button>
+      <button class="btn primary" type="submit" value="ok" autofocus>${options.confirmLabel}</button>
+    </div>
+  </form>`;
+}
 
 function selectOptions<T extends string>(values: T[], labels: Record<T, string>, current: T): Safe {
   return html`${values.map(
@@ -1175,21 +1199,17 @@ function pieChart(title: string, slices: PieSlice[]): Safe {
   </figure>`;
 }
 
-function reportLine(line: ReportLine): Safe {
+function reportLine({ line, nested }: NestedLine): Safe {
   const { kind, days } = line.deadline;
   const tone = kind === "upcoming" && days <= 3 ? "soon" : kind;
-  return html`<li class="rline">
+  return html`<li class="rline rline-${line.kind} ${nested && "is-nested"}">
     <div class="rline-main">
       <span class="badge kind-${line.kind}">${line.kind === "task" ? "Tarefa" : "Subtarefa"}</span>
       <span class="rline-title">${line.title}</span>
-      ${line.parentTitle && html`<span class="muted small">em ${line.parentTitle}</span>`}
+      ${!nested && line.parentTitle && html`<span class="muted small">em ${line.parentTitle}</span>`}
     </div>
     <div class="rline-meta">
-      <span class="badge st-${line.status}">${STATUS_LABEL[line.status]}</span>
       ${line.kind === "task" && html`<span class="rline-progress">${progressBar(line.progress)} <b>${line.progress}%</b></span>`}
-      <span class="rline-dates"
-        >${period(line.start, line.end)}${line.inheritedDates && " (prazo da tarefa)"}</span
-      >
       <span class="deadline dl-${tone}">${deadlineLabel(line.deadline)}</span>
     </div>
   </li>`;
@@ -1243,13 +1263,13 @@ function reportCard(report: PersonReport): Safe {
         report.lines.length === 0
           ? html`<p class="muted">Nada atribuído.</p>`
           : html`
-              ${open.length > 0 ? html`<ul class="rlines">${open.map(reportLine)}</ul>` : html`<p class="muted">Nada em aberto.</p>`}
+              ${open.length > 0 ? html`<ul class="rlines">${nestLines(open).map(reportLine)}</ul>` : html`<p class="muted">Nada em aberto.</p>`}
               ${
                 done.length > 0 &&
                 html`<details class="report-done">
                   <summary>Concluídas (${done.length})</summary>
                   <ul class="rlines">
-                    ${done.map(reportLine)}
+                    ${nestLines(done).map(reportLine)}
                   </ul>
                 </details>`
               }

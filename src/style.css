@@ -2190,3 +2190,134 @@ svg .pie-pending {
 .user-info .pie {
   min-width: 200px;
 }
+
+/* ---------- relatório: tarefas x subtarefas ---------- */
+
+.rline-task {
+  border-left: 4px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+
+.rline-subtask {
+  border-left: 4px solid var(--st-doing);
+  background: color-mix(in srgb, var(--st-doing) 7%, var(--surface));
+}
+
+.rline-subtask.is-nested {
+  margin-left: 22px;
+}
+
+.rline-subtask .rline-title {
+  font-weight: 400;
+}
+
+.badge.kind-task {
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  color: var(--accent);
+}
+
+.badge.kind-subtask {
+  background: color-mix(in srgb, var(--st-doing) 18%, var(--surface));
+  color: var(--st-doing);
+  border: 0;
+}
+
+/* ---------- usuários: linha clicável ---------- */
+
+.user-row {
+  cursor: pointer;
+}
+
+.user-row:hover {
+  background: var(--surface-2);
+}
+
+.user-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.push-left {
+  margin-right: auto;
+}
+
+@media (max-width: 720px) {
+  .rline-subtask.is-nested {
+    margin-left: 14px;
+  }
+
+  dialog .push-left {
+    margin-right: 0;
+  }
+}
+
+/* ---------- popup de confirmação ---------- */
+
+.confirm-dialog {
+  width: min(400px, calc(100vw - 32px));
+  text-align: center;
+}
+
+.confirm {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+
+.confirm-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  color: var(--st-done);
+  background: color-mix(in srgb, var(--st-done) 16%, var(--surface));
+}
+
+.confirm h2 {
+  font-size: 18px;
+}
+
+.confirm p {
+  margin: 0;
+}
+
+.confirm-subject {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  max-width: 100%;
+}
+
+.confirm .row {
+  width: 100%;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.confirm .row .btn {
+  flex: 1;
+  min-height: 40px;
+}
+
+@media (max-width: 720px) {
+  .confirm-dialog {
+    width: calc(100vw - 32px);
+  }
+
+  .confirm .row.end {
+    flex-direction: row;
+  }
+
+  .confirm .row.end .btn {
+    width: auto;
+  }
+}

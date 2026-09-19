@@ -62,6 +62,42 @@ export function deadlineCountdown(deadline: Deadline): string | null {
   }
 }
 
+export interface NestedLine {
+  line: ReportLine;
+  /** Subtarefa exibida logo abaixo (e recuada em relação a) da tarefa dela. */
+  nested: boolean;
+}
+
+/**
+ * Coloca cada subtarefa logo abaixo da tarefa dela, quando ambas estão na lista.
+ * Subtarefas cuja tarefa não está na lista ficam soltas, na posição original.
+ */
+export function nestLines(lines: ReportLine[]): NestedLine[] {
+  const taskIds = new Set<string>();
+  for (const line of lines) {
+    if (line.kind === "task") {
+      taskIds.add(line.id);
+    }
+  }
+  const children = new Map<string, ReportLine[]>();
+  for (const line of lines) {
+    if (line.kind === "subtask" && taskIds.has(line.taskId)) {
+      children.set(line.taskId, [...(children.get(line.taskId) ?? []), line]);
+    }
+  }
+  const result: NestedLine[] = [];
+  for (const line of lines) {
+    if (line.kind === "subtask" && taskIds.has(line.taskId)) {
+      continue;
+    }
+    result.push({ line, nested: false });
+    for (const child of children.get(line.id) ?? []) {
+      result.push({ line: child, nested: true });
+    }
+  }
+  return result;
+}
+
 export const UNASSIGNED = "__unassigned__";
 
 export interface ReportPerson {

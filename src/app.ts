@@ -13,6 +13,8 @@ import { html, mount, type Safe } from "./ui/html";
 import {
   chatMessages,
   commentsDialog,
+  confirmDialog,
+  type ConfirmOptions,
   ganttView,
   linkDialog,
   loginView,
@@ -223,6 +225,26 @@ function openDialog(content: Safe): void {
     dialog.showModal();
   }
   dialog.querySelector<HTMLElement>("input:not([type=hidden]), textarea, select")?.focus();
+}
+
+/** Popup de confirmação no visual do site (fica por cima de qualquer diálogo aberto). */
+function askConfirm(options: ConfirmOptions): Promise<boolean> {
+  const dialog = byId("confirm") as HTMLDialogElement;
+  mount(dialog, confirmDialog(options));
+  dialog.returnValue = "";
+  return new Promise((resolve) => {
+    dialog.addEventListener("close", () => resolve(dialog.returnValue === "ok"), { once: true });
+    dialog.showModal();
+  });
+}
+
+function confirmDone(kind: "tarefa" | "subtarefa", title: string): Promise<boolean> {
+  return askConfirm({
+    title: kind === "tarefa" ? "Concluir tarefa?" : "Concluir subtarefa?",
+    subject: title,
+    message: "Ela será marcada como concluída. Você pode reabri-la depois.",
+    confirmLabel: "Concluir",
+  });
 }
 
 function closeDialog(): void {
@@ -476,7 +498,7 @@ const actions: Record<string, Handler> = {
         return;
       }
       const done = el.checked;
-      if (done && !confirm(`Marcar a subtarefa "${subtask.title}" como concluída?`)) {
+      if (done && !(await confirmDone("subtarefa", subtask.title))) {
         el.checked = false;
         return;
       }
@@ -513,6 +535,7 @@ const actions: Record<string, Handler> = {
         return;
       }
       await api.deleteUser(person.id);
+      closeDialog();
       await loadAll();
       renderContent();
     }),
@@ -609,7 +632,7 @@ async function submitTask(form: HTMLFormElement): Promise<void> {
     return;
   }
   if (input.status === "done" && existing?.status !== "done") {
-    if (!confirm(`Marcar a tarefa "${input.title}" como concluída?`)) {
+    if (!(await confirmDone("tarefa", input.title))) {
       return;
     }
   }
@@ -642,11 +665,7 @@ async function submitSubtask(form: HTMLFormElement): Promise<void> {
   }
   const current = found?.task.subtasks[found.index];
   const before = current?.start_after_id ?? null;
-  if (
-    data.has("done") &&
-    !current?.done &&
-    !confirm(`Marcar a subtarefa "${title}" como concluída?`)
-  ) {
+  if (data.has("done") && !current?.done && !(await confirmDone("subtarefa", title))) {
     return;
   }
   await api.updateSubtask(id, {

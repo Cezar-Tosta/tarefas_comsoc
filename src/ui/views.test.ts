@@ -3,6 +3,7 @@ import { state } from "../state";
 import type { Profile, Task } from "../types";
 import {
   chatMessages,
+  confirmDialog,
   commentsDialog,
   ganttView,
   linkDialog,
@@ -187,18 +188,22 @@ describe("ganttView", () => {
 });
 
 describe("usersView", () => {
-  it("lists everyone in a table with edit and delete buttons", () => {
+  it("lists everyone in a table where each row opens the user, with no buttons in the list", () => {
     const out = usersView().value;
     expect(out).toContain('class="users-table"');
     expect(out).toMatch(/data-action="edit-user"\s+data-id="u1"/);
-    expect(out).toMatch(/data-action="delete-user"\s+data-id="u1"/);
+    expect(out).not.toContain('data-action="delete-user"');
+    expect(out).not.toContain("Editar</button>");
   });
 
-  it("locks edit and delete on the current user's own row", () => {
+  it("does not make the current user's own row clickable", () => {
     const out = usersView().value;
-    expect(out).toMatch(/data-action="edit-user"\s+data-id="a"[^>]*disabled/);
-    expect(out).toMatch(/data-action="delete-user"\s+data-id="a"[^>]*disabled/);
-    expect(out).not.toMatch(/data-action="edit-user"\s+data-id="u1"[^>]*disabled/);
+    expect(out).not.toMatch(/data-action="edit-user"\s+data-id="a"/);
+  });
+
+  it("offers delete only inside the user dialog", () => {
+    const out = userDialog(ana).value;
+    expect(out).toMatch(/data-action="delete-user"\s+data-id="u1"/);
   });
 
   it("summarises how many users there are and of which types", () => {
@@ -506,6 +511,22 @@ describe("subtask starting after another", () => {
       throw new Error("fixture vazia");
     }
     expect(subtaskDialog(task, s2).value).toMatch(/name="start_date"[^>]*readonly/);
+  });
+});
+
+describe("confirmDialog", () => {
+  it("names the item, escapes it, and offers confirm and cancel", () => {
+    const out = confirmDialog({
+      title: "Concluir tarefa?",
+      subject: "Relatório <b>anual</b>",
+      message: "Ela será marcada como concluída.",
+      confirmLabel: "Concluir",
+    }).value;
+    expect(out).toContain("Concluir tarefa?");
+    expect(out).toContain("Relatório &lt;b&gt;anual&lt;/b&gt;");
+    expect(out).toContain('method="dialog"');
+    expect(out).toMatch(/value="cancel"/);
+    expect(out).toMatch(/value="ok"/);
   });
 });
 

@@ -5,11 +5,41 @@ import {
   buildTeamReport,
   deadlineInfo,
   deadlineCountdown,
+  nestLines,
   deadlineLabel,
   UNASSIGNED,
+  type ReportLine,
 } from "./reports";
 
 const today = "2026-09-19";
+
+const mkLine = (kind: "task" | "subtask", id: string, taskId: string): ReportLine => ({
+  kind,
+  id,
+  taskId,
+  title: id,
+  parentTitle: null,
+  status: "todo",
+  progress: 0,
+  start: null,
+  end: null,
+  inheritedDates: false,
+  deadline: { kind: "none", days: 0 },
+});
+
+describe("nestLines", () => {
+  it("puts each subtask right under its task, keeping the order of the rest", () => {
+    const lines = [
+      mkLine("task", "t1", "t1"),
+      mkLine("subtask", "s2", "t2"),
+      mkLine("task", "t2", "t2"),
+      mkLine("subtask", "s1", "t1"),
+      mkLine("subtask", "orphan", "gone"),
+    ];
+    const out = nestLines(lines).map((n) => `${n.nested ? ">" : ""}${n.line.id}`);
+    expect(out).toEqual(["t1", ">s1", "t2", ">s2", "orphan"]);
+  });
+});
 
 describe("deadlineCountdown", () => {
   it("counts down, counts overdue days and says HOJE on the due date", () => {

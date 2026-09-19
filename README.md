@@ -14,8 +14,8 @@ Front-end estático (Vite + TypeScript, sem framework) e **Supabase** como backe
 - **Filtros** (valem para lista, Gantt e exportação): busca, status (inclui "atrasadas"), responsável, prioridade, período, ocultar concluídas. Ficam salvos no navegador.
 - **Comentários** em cada tarefa, em formato de chat (atualiza sozinho a cada 8 s enquanto aberto). Administradores e usuários comentam; visualizadores só leem. Apaga quem escreveu ou um administrador. Links coladas no texto viram clicáveis.
 - **Links** anexados à tarefa (título opcional; só http/https). Quem edita a tarefa adiciona e remove.
-- **Relatório**: gráficos de pizza compactos. O administrador vê o andamento por pessoa (tarefas e subtarefas, atrasos, próximos prazos); cada usuário vê o seu. Mostra dias de atraso, dias que faltam, maior atraso e o que vence em 7 dias. Cada pessoa aparece encolhida, com o mesmo switch "Encolher tudo / Expandir tudo". Visualizadores não têm essa aba.
-- **Usuários** (administrador): tabela compacta com Editar (nome e perfil) e Excluir, e um resumo com o total e uma pizza por perfil. Não dá para editar nem excluir a própria conta.
+- **Relatório**: gráficos de pizza compactos. O administrador vê o andamento por pessoa (tarefas e subtarefas, atrasos, próximos prazos); cada usuário vê o seu. Mostra dias de atraso, dias que faltam, maior atraso e o que vence em 7 dias. Na lista de itens, as subtarefas aparecem recuadas abaixo da tarefa e em outra cor, sem datas nem status. Cada pessoa aparece encolhida, com o mesmo switch "Encolher tudo / Expandir tudo". Visualizadores não têm essa aba.
+- **Usuários** (administrador): tabela compacta; ao clicar em um usuário abre o diálogo para editar (nome e perfil) ou excluir. Há também um resumo com o total e uma pizza por perfil. Não dá para editar nem excluir a própria conta.
 - **Visibilidade**: o usuário só vê tarefas em que é responsável (pela tarefa ou por uma subtarefa). Sem nada atribuído, as abas ficam vazias com um aviso. Administrador e visualizador veem tudo.
 - **Exportar CSV** (abre direto no Excel).
 - **Perfis**:
