@@ -1,0 +1,748 @@
+import { PRIORITIES, PRIORITY_LABEL, ROLE_LABEL, ROLES, STATUS_LABEL, STATUSES } from "../labels";
+import { formatBR, todayISO } from "../lib/dates";
+import { filterTasks } from "../lib/filters";
+import {
+  barGeometry,
+  buildGanttItems,
+  buildScale,
+  computeRange,
+  PX_PER_DAY,
+  type Zoom,
+} from "../lib/gantt";
+import {
+  canAssign,
+  canCreateTask,
+  canDeleteTask,
+  canEditTask,
+  canManageSubtasks,
+  canManageUsers,
+  canToggleSubtask,
+} from "../lib/permissions";
+import {
+  effectiveStatus,
+  isOverdue,
+  overallProgress,
+  splitSubtasks,
+  taskProgress,
+} from "../lib/progress";
+import { currentUser, state, type View } from "../state";
+import type { Profile, Subtask, Task } from "../types";
+import { html, raw, type Safe } from "./html";
+
+function personName(id: string | null): string {
+  if (!id) {
+    return "Sem responsável";
+  }
+  const person = state.profiles.find((p) => p.id === id);
+  return person ? person.name || person.email : "Usuário removido";
+}
+
+function period(start: string | null, end: string | null): string {
+  if (!start && !end) {
+    return "Sem datas";
+  }
+  return `${formatBR(start)} → ${formatBR(end)}`;
+}
+
+function activePeople(): Profile[] {
+  return state.profiles.filter((p) => p.role === "admin" || p.role === "user");
+}
+
+// ---------- telas de acesso ----------
+
+export function setupView(): Safe {
+  return html`<main class="auth">
+    <section class="panel">
+      <h1>Tarefas COMSOC</h1>
+      <p>O Supabase ainda não foi configurado neste build.</p>
+      <ol>
+        <li>Crie um projeto em supabase.com e execute <code>supabase/schema.sql</code>.</li>
+        <li>
+          Copie <code>.env.example</code> para <code>.env.local</code> e preencha
+          <code>VITE_SUPABASE_URL</code> e <code>VITE_SUPABASE_ANON_KEY</code>.
+        </li>
+        <li>
+          Para o GitHub Pages, cadastre as mesmas duas chaves como <em>variables</em> do
+          repositório.
+        </li>
+      </ol>
+      <p>Detalhes no <code>README.md</code>.</p>
+    </section>
+  </main>`;
+}
+
+export function loginView(): Safe {
+  const signup = state.authMode === "signup";
+  return html`<main class="auth">
+    <section class="panel">
+      <h1>Tarefas COMSOC</h1>
+      <p class="muted">${signup ? "Crie sua conta" : "Entre para continuar"}</p>
+      <form data-form="auth" class="stack">
+        ${
+          signup &&
+          html`<label
+            >Nome
+            <input name="name" required maxlength="80" autocomplete="name" />
+          </label>`
+        }
+        <label
+          >E-mail
+          <input name="email" type="email" required autocomplete="email" />
+        </label>
+        <label
+          >Senha
+          <input
+            name="password"
+            type="password"
+            required
+            minlength="8"
+            autocomplete="${signup ? "new-password" : "current-password"}"
+          />
+        </label>
+        ${state.authMessage && html`<p class="notice" role="status">${state.authMessage}</p>`}
+        <button class="btn primary" type="submit">${signup ? "Criar conta" : "Entrar"}</button>
+      </form>
+      <p class="muted center">
+        ${signup ? "Já tem conta?" : "Ainda não tem conta?"}
+        <button class="link" data-action="toggle-auth" type="button">
+          ${signup ? "Entrar" : "Cadastre-se"}
+        </button>
+      </p>
+    </section>
+  </main>`;
+}
+
+export function pendingView(): Safe {
+  const me = currentUser();
+  return html`<main class="auth">
+    <section class="panel">
+      <h1>Aguardando aprovação</h1>
+      <p>
+        Olá, <strong>${me.name || me.email}</strong>. Sua conta foi criada, mas um administrador
+        precisa liberar o acesso e definir seu perfil.
+      </p>
+      <div class="row">
+        <button class="btn" data-action="refresh" type="button">Verificar novamente</button>
+        <button class="btn" data-action="logout" type="button">Sair</button>
+      </div>
+    </section>
+  </main>`;
+}
+
+// ---------- estrutura principal ----------
+
+function navTab(view: View, label: string): Safe {
+  const active = state.view === view;
+  return html`<button
+    class="tab"
+    type="button"
+    data-action="nav"
+    data-view="${view}"
+    ${active && raw('aria-current="page"')}
+  >
+    ${label}
+  </button>`;
+}
+
+export function shellView(): Safe {
+  const me = currentUser();
+  return html`<div class="app">
+    <header class="topbar">
+      <h1>Tarefas COMSOC</h1>
+      <nav class="tabs" aria-label="Seções">
+        ${navTab("tasks", "Tarefas")} ${navTab("gantt", "Gantt")}
+        ${canManageUsers(me) && navTab("users", "Usuários")}
+      </nav>
+      <div class="who">
+        <span class="who-name">${me.name || me.email}</span>
+        <span class="badge role-${me.role}">${ROLE_LABEL[me.role]}</span>
+        <button class="btn small" type="button" data-action="logout">Sair</button>
+      </div>
+    </header>
+    <main class="page">
+      <section id="summary" aria-label="Resumo"></section>
+      <section id="toolbar" aria-label="Filtros"></section>
+      <section id="content"></section>
+    </main>
+  </div>`;
+}
+
+function card(label: string, value: number | string, tone = ""): Safe {
+  return html`<div class="stat ${tone}">
+    <span class="stat-value">${value}</span><span class="stat-label">${label}</span>
+  </div>`;
+}
+
+function opt(value: string, label: string, current: string): Safe {
+  return html`<option value="${value}" ${value === current && raw("selected")}>${label}</option>`;
+}
+
+function cells(list: { label: string; left: number; width: number }[]): Safe {
+  return html`${list.map((c) => html`<span class="g-cell" style="left:${c.left}px;width:${c.width}px">${c.label}</span>`)}`;
+}
+
+export function summaryView(today: string): Safe {
+  const tasks = state.tasks;
+  let doing = 0;
+  let done = 0;
+  let late = 0;
+  for (const task of tasks) {
+    const status = effectiveStatus(task);
+    if (status === "doing") {
+      doing++;
+    }
+    if (status === "done") {
+      done++;
+    }
+    if (isOverdue(task, today)) {
+      late++;
+    }
+  }
+  const overall = overallProgress(tasks);
+  return html`<div class="stats">
+    ${card("Tarefas", tasks.length)} ${card("Em andamento", doing)}
+    ${card("Concluídas", done, "ok")} ${card("Atrasadas", late, late > 0 ? "bad" : "")}
+    <div class="stat wide">
+      <span class="stat-value">${overall}%</span>
+      <span class="stat-label">Progresso geral</span>
+      ${progressBar(overall)}
+    </div>
+  </div>`;
+}
+
+export function toolbarView(): Safe {
+  const me = currentUser();
+  const f = state.filters;
+  return html`<div class="toolbar">
+    <label class="field grow"
+      >Buscar
+      <input
+        type="search"
+        data-filter="q"
+        value="${f.q}"
+        placeholder="Título, descrição ou subtarefa"
+      />
+    </label>
+    <label class="field"
+      >Status
+      <select data-filter="status">
+        ${opt("all", "Todos", f.status)} ${STATUSES.map((s) => opt(s, STATUS_LABEL[s], f.status))}
+        ${opt("overdue", "Atrasadas", f.status)}
+      </select>
+    </label>
+    <label class="field"
+      >Responsável
+      <select data-filter="assignee">
+        ${opt("all", "Todos", f.assignee)} ${opt("none", "Sem responsável", f.assignee)}
+        ${activePeople().map((p) => opt(p.id, p.name || p.email, f.assignee))}
+      </select>
+    </label>
+    <label class="field"
+      >Prioridade
+      <select data-filter="priority">
+        ${opt("all", "Todas", f.priority)}
+        ${PRIORITIES.map((p) => opt(p, PRIORITY_LABEL[p], f.priority))}
+      </select>
+    </label>
+    <label class="field"
+      >De
+      <input type="date" data-filter="from" value="${f.from}" />
+    </label>
+    <label class="field"
+      >Até
+      <input type="date" data-filter="to" value="${f.to}" />
+    </label>
+    <label class="check">
+      <input type="checkbox" data-filter="hideDone" ${f.hideDone && raw("checked")} />
+      Ocultar concluídas
+    </label>
+    <button class="btn small" type="button" data-action="reset-filters">Limpar</button>
+    <div class="toolbar-actions">
+      ${
+        canCreateTask(me) &&
+        html`<button class="btn primary" type="button" data-action="new-task">
+          + Nova tarefa
+        </button>`
+      }
+      <button class="btn" type="button" data-action="export-csv">Exportar CSV</button>
+      <button class="btn" type="button" data-action="refresh" title="Recarregar dados">
+        Atualizar
+      </button>
+    </div>
+  </div>`;
+}
+
+// ---------- lista de tarefas ----------
+
+function progressBar(percent: number): Safe {
+  return html`<div
+    class="progress"
+    role="progressbar"
+    aria-valuemin="0"
+    aria-valuemax="100"
+    aria-valuenow="${percent}"
+  >
+    <div class="progress-fill" style="width:${percent}%"></div>
+  </div>`;
+}
+
+function subtaskRow(me: Profile, task: Task, subtask: Subtask): Safe {
+  const canToggle = canToggleSubtask(me, task, subtask);
+  const canRemove = canManageSubtasks(me, task);
+  const late = !subtask.done && subtask.end_date !== null && subtask.end_date < todayISO();
+  return html`<li class="sub ${subtask.done && "is-done"}">
+    <label class="sub-main">
+      <input
+        type="checkbox"
+        data-action="toggle-sub"
+        data-id="${subtask.id}"
+        ${subtask.done && raw("checked")}
+        ${!canToggle && raw("disabled")}
+      />
+      <span class="sub-title">${subtask.title}</span>
+    </label>
+    <span class="sub-meta">
+      ${subtask.assignee_id && html`<span class="chip">${personName(subtask.assignee_id)}</span>`}
+      ${
+        (subtask.start_date || subtask.end_date) &&
+        html`<span class="chip ${late && "late"}"
+          >${period(subtask.start_date, subtask.end_date)}</span
+        >`
+      }
+    </span>
+    <span class="sub-actions">
+      ${
+        canToggle &&
+        html`<button
+          class="icon"
+          type="button"
+          data-action="edit-sub"
+          data-id="${subtask.id}"
+          aria-label="Editar subtarefa"
+          title="Editar"
+        >
+          ✎
+        </button>`
+      }
+      ${
+        canRemove &&
+        html`<button
+          class="icon danger"
+          type="button"
+          data-action="delete-sub"
+          data-id="${subtask.id}"
+          aria-label="Excluir subtarefa"
+          title="Excluir"
+        >
+          ✕
+        </button>`
+      }
+    </span>
+  </li>`;
+}
+
+function taskCard(me: Profile, task: Task): Safe {
+  const status = effectiveStatus(task);
+  const percent = taskProgress(task);
+  const late = isOverdue(task, todayISO());
+  const { open, done } = splitSubtasks(task.subtasks);
+  const canEdit = canEditTask(me, task);
+  const canAddSub = canManageSubtasks(me, task);
+  return html`<article class="card status-${status} ${late && "is-late"}">
+    <header class="card-head">
+      <div class="card-title">
+        <h2>${task.title}</h2>
+        <div class="badges">
+          <span class="badge st-${status}">${STATUS_LABEL[status]}</span>
+          <span class="badge pr-${task.priority}"
+            >Prioridade ${PRIORITY_LABEL[task.priority].toLowerCase()}</span
+          >
+          ${late && html`<span class="badge late">Atrasada</span>`}
+        </div>
+      </div>
+      <div class="card-actions">
+        ${
+          canEdit &&
+          html`<button class="btn small" type="button" data-action="edit-task" data-id="${task.id}">
+            Editar
+          </button>`
+        }
+        ${
+          canDeleteTask(me) &&
+          html`<button
+            class="btn small danger"
+            type="button"
+            data-action="delete-task"
+            data-id="${task.id}"
+          >
+            Excluir
+          </button>`
+        }
+      </div>
+    </header>
+    ${task.description && html`<p class="desc">${task.description}</p>`}
+    <dl class="meta">
+      <div>
+        <dt>Responsável</dt>
+        <dd>${personName(task.assignee_id)}</dd>
+      </div>
+      <div>
+        <dt>Período</dt>
+        <dd>${period(task.start_date, task.end_date)}</dd>
+      </div>
+    </dl>
+    <div class="progress-row">
+      ${progressBar(percent)}
+      <span class="progress-label">
+        <strong>${percent}%</strong>
+        ${task.subtasks.length > 0 && html` · ${done.length}/${task.subtasks.length} subtarefas`}
+      </span>
+    </div>
+    ${
+      open.length > 0 &&
+      html`<ul class="subs">
+        ${open.map((s) => subtaskRow(me, task, s))}
+      </ul>`
+    }
+    ${
+      canAddSub &&
+      html`<form class="inline-add" data-form="add-sub" data-task="${task.id}">
+        <input
+          name="title"
+          required
+          maxlength="200"
+          placeholder="Nova subtarefa…"
+          aria-label="Nova subtarefa"
+        />
+        <button class="btn small" type="submit">Adicionar</button>
+      </form>`
+    }
+    ${
+      done.length > 0 &&
+      html`<details
+        class="done-group"
+        data-task="${task.id}"
+        ${state.openDone.has(task.id) && raw("open")}
+      >
+        <summary>Concluídas (${done.length})</summary>
+        <ul class="subs">
+          ${done.map((s) => subtaskRow(me, task, s))}
+        </ul>
+      </details>`
+    }
+  </article>`;
+}
+
+export function tasksView(): Safe {
+  const me = currentUser();
+  const visible = filterTasks(state.tasks, state.filters, todayISO());
+  if (state.tasks.length === 0) {
+    return html`<p class="empty">
+      Nenhuma tarefa cadastrada ainda.
+      ${canCreateTask(me) ? "Use “+ Nova tarefa” para começar." : ""}
+    </p>`;
+  }
+  return html`<p class="count">${visible.length} de ${state.tasks.length} tarefas</p>
+    ${
+      visible.length === 0
+        ? html`<p class="empty">Nenhuma tarefa corresponde aos filtros.</p>`
+        : html`<div class="cards">${visible.map((t) => taskCard(me, t))}</div>`
+    }`;
+}
+
+// ---------- Gantt ----------
+
+const ZOOM_LABEL: Record<Zoom, string> = { day: "Dia", week: "Semana", month: "Mês" };
+
+export function ganttView(): Safe {
+  const me = currentUser();
+  const today = todayISO();
+  const visible = filterTasks(state.tasks, state.filters, today);
+  const { items, undated } = buildGanttItems(visible, state.showSubtasks, today);
+  const zoom = state.zoom;
+  const px = PX_PER_DAY[zoom];
+  const range = computeRange(items, today, zoom);
+  const scale = buildScale(range, zoom, px);
+  const trackWidth = range.days * px;
+  const todayLeft = barGeometry(range, { start: today, end: today }, px).left;
+  const cell = zoom === "day" ? px : zoom === "week" ? px * 7 : 0;
+  const tasksById = new Map(state.tasks.map((t) => [t.id, t]));
+
+  const controls = html`<div class="gantt-controls">
+    <div class="segmented" role="group" aria-label="Escala">
+      ${(Object.keys(ZOOM_LABEL) as Zoom[]).map(
+        (z) =>
+          html`<button
+            type="button"
+            data-action="set-zoom"
+            data-zoom="${z}"
+            ${z === zoom && raw('aria-pressed="true"')}
+          >
+            ${ZOOM_LABEL[z]}
+          </button>`,
+      )}
+    </div>
+    <label class="check">
+      <input type="checkbox" data-pref="showSubtasks" ${state.showSubtasks && raw("checked")} />
+      Mostrar subtarefas
+    </label>
+    <button class="btn small" type="button" data-action="scroll-today">Hoje</button>
+    <span class="legend">
+      <i class="dot st-todo"></i>A fazer <i class="dot st-doing"></i>Em andamento
+      <i class="dot st-blocked"></i>Bloqueada <i class="dot st-done"></i>Concluída
+      <i class="dot late"></i>Atrasada
+    </span>
+  </div>`;
+
+  if (items.length === 0) {
+    return html`${controls}
+      <p class="empty">Nenhuma tarefa com datas para exibir no Gantt.</p>
+      ${undatedNote(undated)}`;
+  }
+
+  const rows = items.map((item) => {
+    const bar = barGeometry(range, item, px);
+    const task = tasksById.get(item.kind === "task" ? item.id : (item.parentId ?? ""));
+    const clickable = task
+      ? item.kind === "task"
+        ? canEditTask(me, task)
+        : canToggleSubtask(
+            me,
+            task,
+            task.subtasks.find((s) => s.id === item.id) ?? emptySub(task.id),
+          )
+      : false;
+    const action = item.kind === "task" ? "edit-task" : "edit-sub";
+    const label = html`<span class="g-title">${item.title}</span>
+      <span class="g-sub"
+        >${item.kind === "task" ? personName(task?.assignee_id ?? null) : "Subtarefa"} ·
+        ${formatBR(item.start)} – ${formatBR(item.end)}</span
+      >`;
+    const tone = item.overdue ? "late" : `st-${item.status}`;
+    return html`<div class="g-row ${item.kind === "subtask" && "is-sub"}">
+      <div class="g-label">
+        ${
+          clickable
+            ? html`<button
+                type="button"
+                class="g-link"
+                data-action="${action}"
+                data-id="${item.id}"
+              >
+                ${label}
+              </button>`
+            : html`<div class="g-link">${label}</div>`
+        }
+      </div>
+      <div class="g-track">
+        <i class="g-today" style="left:${todayLeft + px / 2}px"></i>
+        <div
+          class="bar ${tone} ${item.kind === "subtask" && "bar-sub"}"
+          style="left:${bar.left}px;width:${bar.width}px"
+          title="${item.title}: ${formatBR(item.start)} – ${formatBR(item.end)} (${item.progress}%)"
+        >
+          <div class="bar-fill" style="width:${item.progress}%"></div>
+          ${bar.width >= 44 && html`<span class="bar-text">${item.progress}%</span>`}
+        </div>
+      </div>
+    </div>`;
+  });
+
+  return html`${controls}
+    <div class="gantt-scroll" id="gantt-scroll" data-today-left="${todayLeft}">
+      <div
+        class="gantt ${cell === 0 && "no-grid"}"
+        style="--track-w:${trackWidth}px;--cell:${cell}px"
+      >
+        <div class="g-head">
+          <div class="g-label g-corner">Tarefa</div>
+          <div class="g-scale">
+            <div class="g-scale-row">${cells(scale.top)}</div>
+            <div class="g-scale-row">${cells(scale.bottom)}</div>
+          </div>
+        </div>
+        ${rows}
+      </div>
+    </div>
+    ${undatedNote(undated)}`;
+}
+
+function emptySub(taskId: string): Subtask {
+  return {
+    id: "",
+    task_id: taskId,
+    title: "",
+    done: false,
+    start_date: null,
+    end_date: null,
+    assignee_id: null,
+    position: 0,
+  };
+}
+
+function undatedNote(undated: Task[]): Safe {
+  if (undated.length === 0) {
+    return html``;
+  }
+  return html`<p class="muted">
+    Sem datas (fora do Gantt): ${undated.map((t) => t.title).join(", ")}
+  </p>`;
+}
+
+// ---------- usuários ----------
+
+export function usersView(): Safe {
+  const me = currentUser();
+  const pending = state.profiles.filter((p) => p.role === "pending").length;
+  return html`${
+    pending > 0 &&
+    html`<p class="notice">
+        ${pending} conta(s) aguardando aprovação. Defina um perfil para liberar o acesso.
+      </p>`
+  }
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>E-mail</th>
+            <th>Perfil</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${state.profiles.map(
+            (p) => html`<tr>
+              <td>${p.name || "—"}${p.id === me.id && html` <span class="chip">você</span>`}</td>
+              <td>${p.email}</td>
+              <td>
+                <select
+                  data-action="set-role"
+                  data-id="${p.id}"
+                  aria-label="Perfil de ${p.name || p.email}"
+                  ${p.id === me.id && raw("disabled")}
+                >
+                  ${ROLES.map(
+                    (r) =>
+                      html`<option value="${r}" ${r === p.role && raw("selected")}>
+                        ${ROLE_LABEL[r]}
+                      </option>`,
+                  )}
+                </select>
+              </td>
+            </tr>`,
+          )}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">
+      <strong>Administrador:</strong> tudo. <strong>Usuário:</strong> edita só o que for atribuído a
+      ele. <strong>Visualizador:</strong> somente consulta. Você não pode alterar o próprio perfil.
+    </p>`;
+}
+
+// ---------- diálogos ----------
+
+function selectOptions<T extends string>(values: T[], labels: Record<T, string>, current: T): Safe {
+  return html`${values.map(
+    (v) => html`<option value="${v}" ${v === current && raw("selected")}>${labels[v]}</option>`,
+  )}`;
+}
+
+function assigneeSelect(current: string | null, editable: boolean): Safe {
+  if (!editable) {
+    return html`<div class="readonly">${personName(current)}</div>`;
+  }
+  return html`<select name="assignee_id">
+    <option value="" ${current === null && raw("selected")}>Sem responsável</option>
+    ${activePeople().map(
+      (p) =>
+        html`<option value="${p.id}" ${p.id === current && raw("selected")}>
+          ${p.name || p.email}
+        </option>`,
+    )}
+  </select>`;
+}
+
+export function taskDialog(task: Task | null): Safe {
+  const me = currentUser();
+  const editableAssignee = canAssign(me);
+  return html`<form data-form="task" data-id="${task?.id ?? ""}" class="stack">
+    <h2>${task ? "Editar tarefa" : "Nova tarefa"}</h2>
+    <label
+      >Título
+      <input name="title" required maxlength="200" value="${task?.title ?? ""}" />
+    </label>
+    <label
+      >Descrição
+      <textarea name="description" rows="3" maxlength="5000">${task?.description ?? ""}</textarea>
+    </label>
+    <div class="grid2">
+      <label
+        >Status
+        <select name="status">
+          ${selectOptions(STATUSES, STATUS_LABEL, task?.status ?? "todo")}
+        </select>
+      </label>
+      <label
+        >Prioridade
+        <select name="priority">
+          ${selectOptions(PRIORITIES, PRIORITY_LABEL, task?.priority ?? "medium")}
+        </select>
+      </label>
+      <label
+        >Início
+        <input name="start_date" type="date" value="${task?.start_date ?? ""}" />
+      </label>
+      <label
+        >Fim
+        <input name="end_date" type="date" value="${task?.end_date ?? ""}" />
+      </label>
+    </div>
+    <label>Responsável ${assigneeSelect(task?.assignee_id ?? null, editableAssignee)} </label>
+    ${
+      task &&
+      task.subtasks.length > 0 &&
+      html`<p class="muted small">
+        O status exibido considera as subtarefas: com todas concluídas a tarefa aparece como
+        concluída.
+      </p>`
+    }
+    <p class="form-error" data-error role="alert"></p>
+    <div class="row end">
+      <button class="btn" type="button" data-action="close-dialog">Cancelar</button>
+      <button class="btn primary" type="submit">Salvar</button>
+    </div>
+  </form>`;
+}
+
+export function subtaskDialog(task: Task, subtask: Subtask): Safe {
+  const me = currentUser();
+  const editableAssignee = canManageSubtasks(me, task);
+  return html`<form data-form="subtask" data-id="${subtask.id}" class="stack">
+    <h2>Editar subtarefa</h2>
+    <p class="muted small">Tarefa: ${task.title}</p>
+    <label
+      >Título
+      <input name="title" required maxlength="200" value="${subtask.title}" />
+    </label>
+    <div class="grid2">
+      <label
+        >Início
+        <input name="start_date" type="date" value="${subtask.start_date ?? ""}" />
+      </label>
+      <label
+        >Fim
+        <input name="end_date" type="date" value="${subtask.end_date ?? ""}" />
+      </label>
+    </div>
+    <label>Responsável ${assigneeSelect(subtask.assignee_id, editableAssignee)} </label>
+    <label class="check">
+      <input type="checkbox" name="done" ${subtask.done && raw("checked")} /> Concluída
+    </label>
+    <p class="form-error" data-error role="alert"></p>
+    <div class="row end">
+      <button class="btn" type="button" data-action="close-dialog">Cancelar</button>
+      <button class="btn primary" type="submit">Salvar</button>
+    </div>
+  </form>`;
+}
