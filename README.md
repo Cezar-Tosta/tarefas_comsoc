@@ -30,7 +30,7 @@ Front-end estático (Vite + TypeScript, sem framework) e **Supabase** como backe
 ## Configuração (uma vez)
 
 1. Crie um projeto em <https://supabase.com>.
-2. No **SQL Editor**, cole e execute o **conteúdo** de `supabase/schema.sql` e, em seguida, de `supabase/002_comments_links.sql` (comentários e links) e `supabase/003_user_visibility.sql` (cada usuário só enxerga o que está ligado a ele) e `supabase/004_delete_user.sql` (excluir usuários pela aba Usuários). Rode cada um, nessa ordem.
+2. No **SQL Editor**, cole e execute o **conteúdo** de `supabase/schema.sql` e, em seguida, de `supabase/002_comments_links.sql` (comentários e links) , `supabase/003_user_visibility.sql` (cada usuário só enxerga o que está ligado a ele), `supabase/004_delete_user.sql` (excluir usuários pela aba Usuários) e `supabase/005_subtask_start_after.sql` (subtarefa que começa após o término de outra). Rode cada um, nessa ordem.
 3. Em **Authentication → Providers → Email**, decida se exige confirmação de e-mail
    (desligar simplifica o primeiro acesso; ligar é mais seguro). Em **Authentication → URL Configuration**,
    coloque a URL do seu Pages (`https://<usuario>.github.io/<repo>/`) em _Site URL_.

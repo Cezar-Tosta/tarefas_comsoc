@@ -1,4 +1,5 @@
 import type { Profile, Status, Task } from "../types";
+import { resolveSubtaskDates } from "./subtaskDates";
 import { diffDays } from "./dates";
 import { effectiveStatus, taskProgress } from "./progress";
 
@@ -182,9 +183,10 @@ export function buildPersonReport(
       if ((subtask.assignee_id ?? task.assignee_id) !== owner) {
         continue;
       }
-      const own = subtask.start_date !== null || subtask.end_date !== null;
-      const start = own ? (subtask.start_date ?? subtask.end_date) : task.start_date;
-      const end = own ? (subtask.end_date ?? subtask.start_date) : task.end_date;
+      const dates = resolveSubtaskDates(subtask, task.subtasks);
+      const own = dates.start !== null || dates.end !== null;
+      const start = own ? (dates.start ?? dates.end) : task.start_date;
+      const end = own ? (dates.end ?? dates.start) : task.end_date;
       const deadline = deadlineInfo(end, subtask.done, today);
       subtaskTotal++;
       if (subtask.done) {

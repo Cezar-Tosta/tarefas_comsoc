@@ -18,6 +18,8 @@ export interface Subtask {
   end_date: string | null;
   assignee_id: string | null;
   position: number;
+  /** Subtarefa (da mesma tarefa) após cujo término esta começa; ausente sem a migração 005. */
+  start_after_id?: string | null;
 }
 
 export interface TaskLink {

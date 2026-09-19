@@ -5,6 +5,7 @@ import { todayISO } from "./lib/dates";
 import { DEFAULT_FILTERS, filterTasks } from "./lib/filters";
 import type { Zoom } from "./lib/gantt";
 import { normalizeUrl } from "./lib/links";
+import { wouldCreateCycle } from "./lib/subtaskDates";
 import { canManageUsers, canSeeReports, visibleTasks } from "./lib/permissions";
 import { currentUser, savePrefs, state, type View } from "./state";
 import type { Priority, Role, Status, TaskInput } from "./types";
@@ -109,10 +110,7 @@ export function render(): void {
 
 /** Atualiza resumo e conteúdo sem recriar a barra de filtros (preserva foco ao digitar). */
 function renderContent(): void {
-  mount(
-    byId("summary"),
-    state.view === "gantt" || state.view === "users" ? html`` : summaryView(todayISO()),
-  );
+  mount(byId("summary"), state.view === "reports" ? summaryView(todayISO()) : html``);
   let content: Safe;
   if (state.view === "gantt") {
     content = ganttView();
@@ -551,6 +549,14 @@ const actions: Record<string, Handler> = {
       renderContent();
     }),
 
+  // Início vinculado ao término de outra subtarefa: trava o campo de data de início.
+  "link-start": (el) => {
+    const start = el.closest("form")?.querySelector<HTMLInputElement>('input[name="start_date"]');
+    if (start && el instanceof HTMLSelectElement) {
+      start.readOnly = el.value !== "";
+    }
+  },
+
   "close-dialog": closeDialog,
 };
 
@@ -609,8 +615,15 @@ async function submitSubtask(form: HTMLFormElement): Promise<void> {
   const id = form.dataset["id"] ?? "";
   const start = field(data, "start_date") || null;
   const end = field(data, "end_date") || null;
-  if (start && end && end < start) {
+  const found = findSubtask(id);
+  const after = field(data, "start_after_id") || null;
+  // Com início vinculado, a data de início digitada é ignorada (não há o que comparar).
+  if (!after && start && end && end < start) {
     formError(form, "A data de fim não pode ser anterior à de início.");
+    return;
+  }
+  if (found && after && wouldCreateCycle(found.task.subtasks, id, after)) {
+    formError(form, "Essa escolha criaria um ciclo entre subtarefas.");
     return;
   }
   const title = field(data, "title").trim();
@@ -618,10 +631,13 @@ async function submitSubtask(form: HTMLFormElement): Promise<void> {
     formError(form, "Informe um título.");
     return;
   }
+  const before = found?.task.subtasks[found.index]?.start_after_id ?? null;
   await api.updateSubtask(id, {
     title,
     start_date: start,
     end_date: end,
+    // só envia quando muda: sem a migração 005 a coluna não existe e o restante ainda salva
+    ...(after === before ? {} : { start_after_id: after }),
     done: data.has("done"),
     ...(data.has("assignee_id") ? { assignee_id: field(data, "assignee_id") || null } : {}),
   });

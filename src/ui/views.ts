@@ -6,6 +6,7 @@ import { hostLabel, isHttpUrl } from "../lib/links";
 import { filterTasks } from "../lib/filters";
 import { computeMetrics, metricsScope } from "../lib/metrics";
 import { percentOf, pieShapes } from "../lib/pie";
+import { resolveSubtaskDates, wouldCreateCycle } from "../lib/subtaskDates";
 import {
   buildPersonReport,
   buildTeamReport,
@@ -359,7 +360,11 @@ function progressBar(percent: number): Safe {
 function subtaskRow(me: Profile, task: Task, subtask: Subtask): Safe {
   const canToggle = canToggleSubtask(me, task, subtask);
   const canRemove = canManageSubtasks(me, task);
-  const late = !subtask.done && subtask.end_date !== null && subtask.end_date < todayISO();
+  const dates = resolveSubtaskDates(subtask, task.subtasks);
+  const late = !subtask.done && dates.end !== null && dates.end < todayISO();
+  const predecessor = subtask.start_after_id
+    ? task.subtasks.find((s) => s.id === subtask.start_after_id)
+    : undefined;
   return html`<li class="sub ${subtask.done && "is-done"}">
     <label class="sub-main">
       <input
@@ -374,10 +379,14 @@ function subtaskRow(me: Profile, task: Task, subtask: Subtask): Safe {
     <span class="sub-meta">
       ${subtask.assignee_id && html`<span class="chip">${personName(subtask.assignee_id)}</span>`}
       ${
-        (subtask.start_date || subtask.end_date) &&
-        html`<span class="chip ${late && "late"}"
-          >${period(subtask.start_date, subtask.end_date)}</span
+        predecessor &&
+        html`<span class="chip" title="Começa no dia seguinte ao término de “${predecessor.title}”"
+          >↳ após ${predecessor.title}</span
         >`
+      }
+      ${
+        (dates.start || dates.end) &&
+        html`<span class="chip ${late && "late"}">${period(dates.start, dates.end)}</span>`
       }
     </span>
     <span class="sub-actions">
@@ -954,6 +963,10 @@ export function taskDialog(task: Task | null): Safe {
 export function subtaskDialog(task: Task, subtask: Subtask): Safe {
   const me = currentUser();
   const editableAssignee = canManageSubtasks(me, task);
+  const linked = Boolean(subtask.start_after_id);
+  const candidates = task.subtasks.filter(
+    (s) => s.id !== subtask.id && !wouldCreateCycle(task.subtasks, subtask.id, s.id),
+  );
   return html`<form data-form="subtask" data-id="${subtask.id}" class="stack">
     <h2>Editar subtarefa</h2>
     <p class="muted small">Tarefa: ${task.title}</p>
@@ -964,13 +977,37 @@ export function subtaskDialog(task: Task, subtask: Subtask): Safe {
     <div class="grid2">
       <label
         >Início
-        <input name="start_date" type="date" value="${subtask.start_date ?? ""}" />
+        <input
+          name="start_date"
+          type="date"
+          value="${subtask.start_date ?? ""}"
+          ${linked && raw("readonly")}
+        />
       </label>
       <label
         >Fim
         <input name="end_date" type="date" value="${subtask.end_date ?? ""}" />
       </label>
     </div>
+    ${
+      candidates.length > 0 &&
+      html`<label
+        >Começar logo após o término de
+        <select name="start_after_id" data-action="link-start">
+          <option value="" ${!linked && raw("selected")}>Nenhuma (usar a data de início)</option>
+          ${candidates.map(
+            (s) =>
+              html`<option value="${s.id}" ${s.id === subtask.start_after_id && raw("selected")}>
+                ${s.title}
+              </option>`,
+          )}
+        </select>
+        <span class="muted small"
+          >O início passa a ser o dia seguinte ao fim da subtarefa escolhida e acompanha as
+          mudanças dela.</span
+        >
+      </label>`
+    }
     <label>Responsável ${assigneeSelect(subtask.assignee_id, editableAssignee)} </label>
     <label class="check">
       <input type="checkbox" name="done" ${subtask.done && raw("checked")} /> Concluída

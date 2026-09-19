@@ -1,4 +1,5 @@
 import type { Status, Task } from "../types";
+import { resolveSubtaskDates } from "./subtaskDates";
 import {
   addDays,
   dayOfMonth,
@@ -79,8 +80,9 @@ export function buildGanttItems(
       if (hideDoneSubtasks && subtask.done) {
         continue;
       }
-      const subStart = subtask.start_date ?? subtask.end_date ?? start;
-      const subEnd = subtask.end_date ?? subtask.start_date ?? end;
+      const own = resolveSubtaskDates(subtask, task.subtasks);
+      const subStart = own.start ?? own.end ?? start;
+      const subEnd = own.end ?? own.start ?? end;
       items.push({
         id: subtask.id,
         kind: "subtask",
@@ -89,10 +91,10 @@ export function buildGanttItems(
         end: subEnd,
         progress: subtask.done ? 100 : 0,
         status: subtask.done ? "done" : status === "blocked" ? "blocked" : "doing",
-        overdue: !subtask.done && subtask.end_date !== null && subEnd < today,
+        overdue: !subtask.done && own.end !== null && subEnd < today,
         done: subtask.done,
         parentId: task.id,
-        inherited: subtask.start_date === null && subtask.end_date === null,
+        inherited: own.start === null && own.end === null,
       });
     }
   }

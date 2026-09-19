@@ -1,4 +1,5 @@
 import { PRIORITY_LABEL, STATUS_LABEL } from "../labels";
+import { resolveSubtaskDates } from "./subtaskDates";
 import type { Profile, Task } from "../types";
 import { formatBR } from "./dates";
 import { effectiveStatus, taskProgress } from "./progress";
@@ -46,6 +47,7 @@ export function tasksToCsv(tasks: Task[], profiles: Profile[]): string {
       String(taskProgress(task)),
     ]);
     for (const subtask of task.subtasks) {
+      const dates = resolveSubtaskDates(subtask, task.subtasks);
       rows.push([
         "Subtarefa",
         subtask.title,
@@ -53,8 +55,8 @@ export function tasksToCsv(tasks: Task[], profiles: Profile[]): string {
         subtask.done ? STATUS_LABEL.done : STATUS_LABEL.todo,
         "",
         (subtask.assignee_id && names.get(subtask.assignee_id)) || "",
-        formatBR(subtask.start_date),
-        formatBR(subtask.end_date),
+        formatBR(dates.start),
+        formatBR(dates.end),
         subtask.done ? "100" : "0",
       ]);
     }

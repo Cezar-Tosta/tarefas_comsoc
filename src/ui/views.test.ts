@@ -11,6 +11,7 @@ import {
   reportPeopleIds,
   reportsView,
   shellView,
+  subtaskDialog,
   summaryView,
   tasksView,
   toolbarView,
@@ -447,6 +448,54 @@ describe("task deadline countdown", () => {
     state.openTasks = new Set();
     state.tasks = state.tasks.filter((t) => t.id === "t2");
     expect(tasksView().value).not.toContain("deadline");
+  });
+});
+
+function link(): void {
+  const s2 = state.tasks[0]?.subtasks[1];
+  if (!s2) {
+    throw new Error("fixture vazia");
+  }
+  s2.start_after_id = "s1"; // s1 termina em 05/09 → s2 começa em 06/09
+  s2.start_date = "2026-09-10"; // ignorada enquanto vinculada
+}
+
+describe("subtask starting after another", () => {
+  it("offers the sibling subtasks in the edit dialog, without cycles", () => {
+    const task = state.tasks[0];
+    const s1 = task?.subtasks[0];
+    if (!task || !s1) {
+      throw new Error("fixture vazia");
+    }
+    const out = subtaskDialog(task, s1).value;
+    expect(out).toContain('name="start_after_id"');
+    expect(out).toContain("Escrever");
+    link();
+    const cyclic = subtaskDialog(task, s1).value; // s1 não pode vir depois de s2, que vem depois de s1
+    expect(cyclic).not.toContain("Escrever");
+  });
+
+  it("marks the linked subtask and shows the computed dates", () => {
+    link();
+    const out = tasksView().value;
+    expect(out).toContain("↳ após Coletar dados");
+    expect(out).toContain("06/09/2026");
+    expect(out).not.toContain("10/09/2026");
+  });
+
+  it("draws the linked subtask in the Gantt from the computed start", () => {
+    link();
+    expect(ganttView().value).toContain("06/09/2026 – 20/09/2026");
+  });
+
+  it("locks the start date field while linked", () => {
+    link();
+    const task = state.tasks[0];
+    const s2 = task?.subtasks[1];
+    if (!task || !s2) {
+      throw new Error("fixture vazia");
+    }
+    expect(subtaskDialog(task, s2).value).toMatch(/name="start_date"[^>]*readonly/);
   });
 });
 
