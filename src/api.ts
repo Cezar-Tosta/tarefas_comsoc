@@ -133,6 +133,16 @@ export async function saveTask(id: string | null, input: TaskInput): Promise<voi
   check(error);
 }
 
+/** Concluir a própria tarefa (o único ajuste que um usuário faz nela). */
+export async function completeTask(id: string): Promise<void> {
+  const { data, error } = await db()
+    .from("tasks")
+    .update({ status: "done" })
+    .eq("id", id)
+    .select("id");
+  checkAffected(data, error);
+}
+
 export async function deleteTask(id: string): Promise<void> {
   const { data, error } = await db().from("tasks").delete().eq("id", id).select("id");
   checkAffected(data, error);

@@ -28,6 +28,7 @@ import {
 } from "../lib/gantt";
 import {
   canAssign,
+  canCompleteTask,
   canComment,
   canCreateTask,
   canDeleteComment,
@@ -396,7 +397,7 @@ function subtaskRow(me: Profile, task: Task, subtask: Subtask): Safe {
     </span>
     <span class="sub-actions">
       ${
-        canToggle &&
+        canRemove &&
         html`<button
           class="icon"
           type="button"
@@ -541,6 +542,17 @@ function taskCard(me: Profile, task: Task): Safe {
             Comentários${
               task.comment_count > 0 && html` <span class="count-pill">${task.comment_count}</span>`
             }
+          </button>`
+        }
+        ${
+          canCompleteTask(me, task) &&
+          html`<button
+            class="btn small primary"
+            type="button"
+            data-action="complete-task"
+            data-id="${task.id}"
+          >
+            Concluir
           </button>`
         }
         ${
@@ -713,11 +725,7 @@ export function ganttView(): Safe {
     const clickable = task
       ? item.kind === "task"
         ? canEditTask(me, task)
-        : canToggleSubtask(
-            me,
-            task,
-            task.subtasks.find((s) => s.id === item.id) ?? emptySub(task.id),
-          )
+        : canManageSubtasks(me, task)
       : false;
     const action = item.kind === "task" ? "edit-task" : "edit-sub";
     const detail = item.inherited
@@ -772,19 +780,6 @@ export function ganttView(): Safe {
       </div>
     </div>
     ${undatedNote(undated)}`;
-}
-
-function emptySub(taskId: string): Subtask {
-  return {
-    id: "",
-    task_id: taskId,
-    title: "",
-    done: false,
-    start_date: null,
-    end_date: null,
-    assignee_id: null,
-    position: 0,
-  };
 }
 
 function undatedNote(undated: Task[]): Safe {

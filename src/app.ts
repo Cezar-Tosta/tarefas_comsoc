@@ -445,6 +445,17 @@ const actions: Record<string, Handler> = {
     renderContent();
   },
 
+  "complete-task": (el) =>
+    run(async () => {
+      const task = state.tasks.find((t) => t.id === el.dataset["id"]);
+      if (!task || !(await confirmDone("tarefa", task.title))) {
+        return;
+      }
+      await api.completeTask(task.id);
+      await loadTasks();
+      renderContent();
+    }),
+
   "edit-task": (el) => {
     const task = state.tasks.find((t) => t.id === el.dataset["id"]);
     if (task) {

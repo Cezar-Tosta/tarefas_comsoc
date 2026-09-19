@@ -20,12 +20,12 @@ Front-end estático (Vite + TypeScript, sem framework) e **Supabase** como backe
 - **Exportar CSV** (abre direto no Excel).
 - **Perfis**:
 
-  | Perfil               | Pode                                                                                              |
-  | -------------------- | ------------------------------------------------------------------------------------------------- |
-  | Administrador        | Tudo: criar/editar/excluir tarefas e subtarefas, atribuir responsáveis, gerir usuários            |
-  | Usuário              | Editar **somente** tarefas atribuídas a ele (e as subtarefas delas) e subtarefas atribuídas a ele |
-  | Visualizador         | Somente consulta                                                                                  |
-  | Aguardando aprovação | Sem acesso até um administrador definir o perfil                                                  |
+  | Perfil               | Pode                                                                                                                      |
+  | -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+  | Administrador        | Tudo: criar/editar/excluir tarefas e subtarefas, atribuir responsáveis, gerir usuários                                    |
+  | Usuário              | Nas tarefas/subtarefas atribuídas a ele: **marcar como concluída** e **comentar**. Não altera datas nem dados, nem exclui |
+  | Visualizador         | Somente consulta                                                                                                          |
+  | Aguardando aprovação | Sem acesso até um administrador definir o perfil                                                                          |
 
   O **primeiro cadastro vira administrador**; os seguintes entram como "aguardando aprovação", sem e-mail de confirmação (veja o passo 3 da configuração).
   As permissões são **aplicadas no banco** (Row Level Security em `supabase/schema.sql`); a interface apenas esconde o que não se pode fazer.
@@ -33,7 +33,7 @@ Front-end estático (Vite + TypeScript, sem framework) e **Supabase** como backe
 ## Configuração (uma vez)
 
 1. Crie um projeto em <https://supabase.com>.
-2. No **SQL Editor**, cole e execute o **conteúdo** de `supabase/schema.sql` e, em seguida, de `supabase/002_comments_links.sql` (comentários e links), `supabase/003_user_visibility.sql` (cada usuário só enxerga o que está ligado a ele), `supabase/004_delete_user.sql` (excluir usuários pela aba Usuários; sem ela o botão Excluir dá erro) e `supabase/005_subtask_start_after.sql` (subtarefa que começa após o término de outra; sem ela só esse vínculo falha). Rode cada um, nessa ordem.
+2. No **SQL Editor**, cole e execute o **conteúdo** de `supabase/schema.sql` e, em seguida, de `supabase/002_comments_links.sql` (comentários e links), `supabase/003_user_visibility.sql` (cada usuário só enxerga o que está ligado a ele), `supabase/004_delete_user.sql` (excluir usuários pela aba Usuários; sem ela o botão Excluir dá erro), `supabase/005_subtask_start_after.sql` (subtarefa que começa após o término de outra; sem ela só esse vínculo falha) e `supabase/006_user_completes_only.sql` (**importante**: no banco, usuários só concluem e comentam; sem ela a restrição existe só na interface). Rode cada um, nessa ordem.
 3. Em **Authentication → Providers → Email**, **desative "Confirm email"**: novas contas
    não recebem e-mail de confirmação e só aguardam a aprovação de um administrador (com a opção ligada, o cadastro
    exige confirmar o e-mail antes do primeiro login). Em **Authentication → URL Configuration**,

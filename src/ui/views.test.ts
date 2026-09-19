@@ -116,15 +116,31 @@ describe("tasksView", () => {
     expect(toolbarView().value).toContain('data-action="new-task"');
   });
 
-  it("lets a user edit only what is assigned to them", () => {
+  it("lets a user only complete and comment: no edit, delete or subtask structure", () => {
     as(ana);
     const out = tasksView().value;
-    expect(out).toContain('data-action="edit-task" data-id="t1"');
-    expect(out).not.toContain('data-action="edit-task" data-id="t2"');
+    expect(out).not.toContain('data-action="edit-task"');
     expect(out).not.toContain('data-action="delete-task"');
+    expect(out).not.toContain('data-action="edit-sub"');
+    expect(out).not.toContain('data-action="delete-sub"');
+    expect(out).not.toContain('data-form="add-sub"');
     expect(toolbarView().value).not.toContain('data-action="new-task"');
-    expect(out).toContain('data-form="add-sub" data-task="t1"');
-    expect(out).not.toContain('data-form="add-sub" data-task="t2"');
+    // marcar subtarefa como concluída continua habilitado (Ana é dona de t1)
+    const toggle = /data-action="toggle-sub"\s+data-id="s2"[^>]*>/.exec(out)?.[0] ?? "";
+    expect(toggle).not.toBe("");
+    expect(toggle).not.toContain("disabled");
+    expect(out).toContain('data-action="open-comments"');
+  });
+
+  it("gives a user a Concluir button only on their own task without subtasks", () => {
+    as(ana); // t1 tem subtarefas: conclui pelas subtarefas
+    expect(tasksView().value).not.toContain('data-action="complete-task"');
+    as(bia); // t2 é dela e não tem subtarefas
+    const out = tasksView().value;
+    expect(out).toMatch(/data-action="complete-task"\s+data-id="t2"/);
+    expect(out).not.toMatch(/data-action="complete-task"\s+data-id="t1"/);
+    as(admin);
+    expect(tasksView().value).not.toContain('data-action="complete-task"');
   });
 
   it("has a collapsible filters panel with the active-filter count", () => {
@@ -258,13 +274,14 @@ describe("links and comments", () => {
     expect(out).not.toContain('href="javascript:');
   });
 
-  it("lets only whoever edits the task add or remove links", () => {
+  it("lets only admins add or remove links", () => {
     withLinks();
     expect(tasksView().value).toContain('data-action="add-link" data-id="t1"');
-    as(ana); // dona de t1
+    as(ana); // dona de t1, mas usuário só lê os links
     withLinks();
-    expect(tasksView().value).toContain('data-action="add-link" data-id="t1"');
-    expect(tasksView().value).not.toContain('data-action="add-link" data-id="t2"');
+    expect(tasksView().value).not.toContain("add-link");
+    expect(tasksView().value).not.toContain("delete-link");
+    expect(tasksView().value).toContain('href="https://exemplo.com/p"');
     as(vera);
     withLinks();
     const out = tasksView().value;

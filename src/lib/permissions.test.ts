@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Profile, Subtask, Task } from "../types";
 import {
   canAssign,
+  canCompleteTask,
   canComment,
   canCreateTask,
   canDeleteComment,
@@ -60,19 +61,27 @@ describe("permissions", () => {
     expect(canManageUsers(admin)).toBe(true);
   });
 
-  it("users edit only tasks assigned to them", () => {
-    expect(canEditTask(user, t("u"))).toBe(true);
+  it("only admins edit a task's data, even when it is assigned to a user", () => {
+    expect(canEditTask(user, t("u"))).toBe(false);
     expect(canEditTask(user, t("o"))).toBe(false);
-    expect(canEditTask(user, t(null))).toBe(false);
     expect(canEditTask(admin, t("o"))).toBe(true);
     expect(canEditTask(viewer, t("v"))).toBe(false);
   });
 
-  it("subtask structure is managed by the task owner or admin", () => {
-    expect(canManageSubtasks(user, t("u"))).toBe(true);
+  it("subtask structure (create, edit, dates, delete) is admin-only", () => {
+    expect(canManageSubtasks(user, t("u"))).toBe(false);
     expect(canManageSubtasks(other, t("u"))).toBe(false);
     expect(canManageSubtasks(admin, t("u"))).toBe(true);
     expect(canManageSubtasks(viewer, t("v"))).toBe(false);
+  });
+
+  it("a user completes only their own task, and only when it has no subtasks", () => {
+    expect(canCompleteTask(user, t("u"))).toBe(true);
+    expect(canCompleteTask(user, t("o"))).toBe(false);
+    expect(canCompleteTask(user, t("u", [s("u")]))).toBe(false);
+    expect(canCompleteTask(user, { ...t("u"), status: "done" })).toBe(false);
+    expect(canCompleteTask(viewer, t("v"))).toBe(false);
+    expect(canCompleteTask(admin, t("u"))).toBe(false); // o administrador usa "Editar"
   });
 
   it("a subtask can be toggled by its assignee even on someone else's task", () => {
@@ -99,8 +108,8 @@ describe("permissions", () => {
     expect(canDeleteComment(user, { author_id: null })).toBe(false);
   });
 
-  it("links are managed by whoever can edit the task", () => {
-    expect(canManageLinks(user, t("u"))).toBe(true);
+  it("links are managed by admins only", () => {
+    expect(canManageLinks(user, t("u"))).toBe(false);
     expect(canManageLinks(user, t("o"))).toBe(false);
     expect(canManageLinks(admin, t("o"))).toBe(true);
     expect(canManageLinks(viewer, t("v"))).toBe(false);
