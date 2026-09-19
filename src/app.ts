@@ -1,5 +1,5 @@
 import * as api from "./api";
-import { PRIORITIES, STATUSES } from "./labels";
+import { PRIORITIES, ROLES, STATUSES } from "./labels";
 import { tasksToCsv } from "./lib/csv";
 import { todayISO } from "./lib/dates";
 import { DEFAULT_FILTERS, filterTasks } from "./lib/filters";
@@ -24,6 +24,7 @@ import {
   taskDialog,
   tasksView,
   toolbarView,
+  userDialog,
   usersView,
 } from "./ui/views";
 
@@ -96,7 +97,9 @@ export function render(): void {
       mount(app, shellView());
       mount(
         byId("toolbar"),
-        state.view === "users" || state.view === "reports" ? html`` : toolbarView(),
+        state.view === "users" || state.view === "reports"
+          ? html``
+          : toolbarView(state.view !== "gantt"),
       );
       renderContent();
       return;
@@ -105,7 +108,7 @@ export function render(): void {
 
 /** Atualiza resumo e conteúdo sem recriar a barra de filtros (preserva foco ao digitar). */
 function renderContent(): void {
-  mount(byId("summary"), summaryView(todayISO()));
+  mount(byId("summary"), state.view === "gantt" ? html`` : summaryView(todayISO()));
   let content: Safe;
   if (state.view === "gantt") {
     content = ganttView();
@@ -428,17 +431,30 @@ const actions: Record<string, Handler> = {
       }
     }),
 
-  "set-role": (el) =>
+  "edit-user": (el) => {
+    const person = state.profiles.find((p) => p.id === el.dataset["id"]);
+    if (person) {
+      openDialog(userDialog(person));
+    }
+  },
+
+  "delete-user": (el) =>
     run(async () => {
-      if (!(el instanceof HTMLSelectElement)) {
+      const person = state.profiles.find((p) => p.id === el.dataset["id"]);
+      if (!person) {
         return;
       }
-      try {
-        await api.setRole(el.dataset["id"] ?? "", el.value as Role);
-      } finally {
-        state.profiles = await api.fetchProfiles();
-        renderContent();
+      const label = person.name || person.email;
+      if (
+        !confirm(
+          `Excluir o usuário "${label}"? O acesso dele é removido e as tarefas atribuídas a ele ficam sem responsável. Esta ação não pode ser desfeita.`,
+        )
+      ) {
+        return;
       }
+      await api.deleteUser(person.id);
+      await loadAll();
+      renderContent();
     }),
 
   "open-comments": (el) =>
@@ -599,6 +615,25 @@ async function submitLink(form: HTMLFormElement): Promise<void> {
   renderContent();
 }
 
+async function submitUser(form: HTMLFormElement): Promise<void> {
+  const data = new FormData(form);
+  const id = form.dataset["id"] ?? "";
+  const person = state.profiles.find((p) => p.id === id);
+  if (!person) {
+    return;
+  }
+  const name = field(data, "name").trim();
+  if (!name) {
+    formError(form, "Informe um nome.");
+    return;
+  }
+  const role = pick<Role>(ROLES, field(data, "role"), person.role);
+  await api.updateProfile(id, { name, role });
+  closeDialog();
+  state.profiles = await api.fetchProfiles();
+  renderContent();
+}
+
 const forms: Record<string, (form: HTMLFormElement) => Promise<void>> = {
   auth: submitAuth,
   task: submitTask,
@@ -606,6 +641,7 @@ const forms: Record<string, (form: HTMLFormElement) => Promise<void>> = {
   "add-sub": submitAddSub,
   comment: submitComment,
   link: submitLink,
+  user: submitUser,
 };
 
 // ---------- ligação de eventos ----------

@@ -5,6 +5,7 @@ import { formatBR, formatDateTimeBR, todayISO } from "../lib/dates";
 import { hostLabel, isHttpUrl } from "../lib/links";
 import { filterTasks } from "../lib/filters";
 import { computeMetrics, metricsScope } from "../lib/metrics";
+import { percentOf, pieShapes } from "../lib/pie";
 import {
   buildPersonReport,
   buildTeamReport,
@@ -51,7 +52,7 @@ function emptyMessage(me: Profile): string {
     return "Você ainda não tem tarefas atribuídas. Quando um administrador atribuir uma tarefa ou subtarefa a você, ela aparecerá aqui.";
   }
   return canCreateTask(me)
-    ? "Nenhuma tarefa cadastrada ainda. Use “+ Nova tarefa” para começar."
+    ? "Nenhuma tarefa cadastrada ainda. Na aba Tarefas, use “+ Nova tarefa” para começar."
     : "Nenhuma tarefa cadastrada ainda.";
 }
 
@@ -178,7 +179,7 @@ export function shellView(): Safe {
       <h1 class="brand"><img src="${logoSmall}" alt="Tarefas COMSOC" width="44" height="44" /></h1>
       <nav class="tabs" aria-label="Seções">
         ${navTab("tasks", "Tarefas")} ${navTab("gantt", "Gantt")}
-        ${canSeeReports(me) && navTab("reports", "Relatórios")}
+        ${canSeeReports(me) && navTab("reports", "Relatório")}
         ${canManageUsers(me) && navTab("users", "Usuários")}
       </nav>
       <div class="who">
@@ -195,9 +196,12 @@ export function shellView(): Safe {
   </div>`;
 }
 
-function card(label: string, value: number | string, tone = ""): Safe {
+/** `total` (opcional): mostra ao lado do número quanto ele representa do total. */
+function card(label: string, value: number, tone = "", total?: number): Safe {
+  const pct =
+    total !== undefined && html`<small class="stat-pct">${percentOf(value, total)}%</small>`;
   return html`<div class="stat ${tone}">
-    <span class="stat-value">${value}</span><span class="stat-label">${label}</span>
+    <span class="stat-value">${value}${pct}</span><span class="stat-label">${label}</span>
   </div>`;
 }
 
@@ -220,8 +224,8 @@ export function summaryView(today: string): Safe {
   return html`<h2 class="section-title">${title}</h2>
     <div class="stats">
       ${card(me.role === "admin" ? "Tarefas" : "Minhas tarefas", m.total)}
-      ${card("Em andamento", m.doing)} ${card("Concluídas", m.done, "ok")}
-      ${card("Atrasadas", m.late, m.late > 0 ? "bad" : "")}
+      ${card("Em andamento", m.doing, "", m.total)} ${card("Concluídas", m.done, "ok", m.total)}
+      ${card("Atrasadas", m.late, m.late > 0 ? "bad" : "", m.total)}
       <div class="stat wide">
         <span class="stat-value">${m.overall}%</span>
         <span class="stat-label">Progresso ${me.role === "admin" ? "geral" : "das minhas tarefas"}</span>
@@ -230,7 +234,8 @@ export function summaryView(today: string): Safe {
     </div>`;
 }
 
-export function toolbarView(): Safe {
+/** `actions`: mostra "Nova tarefa", "Exportar CSV" e "Atualizar" (a aba Gantt só tem os filtros). */
+export function toolbarView(actions = true): Safe {
   const me = currentUser();
   const f = state.filters;
   const active = activeFilterCount(f);
@@ -291,18 +296,21 @@ export function toolbarView(): Safe {
       </label>
       <button class="btn small" type="button" data-action="reset-filters">Limpar filtros</button>
     </div>
-    <div class="toolbar-actions">
-      ${
-        canCreateTask(me) &&
-        html`<button class="btn primary" type="button" data-action="new-task">
-          + Nova tarefa
-        </button>`
-      }
-      <button class="btn" type="button" data-action="export-csv">Exportar CSV</button>
-      <button class="btn" type="button" data-action="refresh" title="Recarregar dados">
-        Atualizar
-      </button>
-    </div>
+    ${
+      actions &&
+      html`<div class="toolbar-actions">
+        ${
+          canCreateTask(me) &&
+          html`<button class="btn primary" type="button" data-action="new-task">
+            + Nova tarefa
+          </button>`
+        }
+        <button class="btn" type="button" data-action="export-csv">Exportar CSV</button>
+        <button class="btn" type="button" data-action="refresh" title="Recarregar dados">
+          Atualizar
+        </button>
+      </div>`
+    }
   </div>`;
 }
 
@@ -710,43 +718,78 @@ export function usersView(): Safe {
       </p>`
   }
     <div class="table-wrap">
-      <table>
+      <table class="users-table">
         <thead>
           <tr>
             <th>Nome</th>
             <th>E-mail</th>
             <th>Perfil</th>
+            <th class="col-actions">Ações</th>
           </tr>
         </thead>
         <tbody>
-          ${state.profiles.map(
-            (p) => html`<tr>
-              <td data-label="Nome">${p.name || "—"}${p.id === me.id && html` <span class="chip">você</span>`}</td>
+          ${state.profiles.map((p) => {
+            const self = p.id === me.id;
+            return html`<tr>
+              <td data-label="Nome">${p.name || "—"}${self && html` <span class="chip">você</span>`}</td>
               <td data-label="E-mail">${p.email}</td>
               <td data-label="Perfil">
-                <select
-                  data-action="set-role"
-                  data-id="${p.id}"
-                  aria-label="Perfil de ${p.name || p.email}"
-                  ${p.id === me.id && raw("disabled")}
-                >
-                  ${ROLES.map(
-                    (r) =>
-                      html`<option value="${r}" ${r === p.role && raw("selected")}>
-                        ${ROLE_LABEL[r]}
-                      </option>`,
-                  )}
-                </select>
+                <span class="badge role-${p.role}">${ROLE_LABEL[p.role]}</span>
               </td>
-            </tr>`,
-          )}
+              <td data-label="Ações" class="col-actions">
+                <button
+                  class="btn small"
+                  type="button"
+                  data-action="edit-user"
+                  data-id="${p.id}"
+                  aria-label="Editar ${p.name || p.email}"
+                  ${self && raw("disabled")}
+                >
+                  Editar
+                </button>
+                <button
+                  class="btn small danger"
+                  type="button"
+                  data-action="delete-user"
+                  data-id="${p.id}"
+                  aria-label="Excluir ${p.name || p.email}"
+                  ${self && raw("disabled")}
+                >
+                  Excluir
+                </button>
+              </td>
+            </tr>`;
+          })}
         </tbody>
       </table>
     </div>
-    <p class="muted">
+    <p class="muted small">
       <strong>Administrador:</strong> tudo. <strong>Usuário:</strong> edita só o que for atribuído a
-      ele. <strong>Visualizador:</strong> somente consulta. Você não pode alterar o próprio perfil.
+      ele. <strong>Visualizador:</strong> somente consulta. Você não pode alterar nem excluir a
+      própria conta.
     </p>`;
+}
+
+export function userDialog(person: Profile): Safe {
+  return html`<form data-form="user" data-id="${person.id}" class="stack">
+    <h2>Editar usuário</h2>
+    <p class="muted small">${person.email}</p>
+    <label
+      >Nome
+      <input name="name" required maxlength="80" value="${person.name}" />
+    </label>
+    <label
+      >Perfil
+      <select name="role">
+        ${selectOptions(ROLES, ROLE_LABEL, person.role)}
+      </select>
+    </label>
+    <p class="form-error" data-error role="alert"></p>
+    <div class="row end">
+      <button class="btn" type="button" data-action="close-dialog">Cancelar</button>
+      <button class="btn primary" type="submit">Salvar</button>
+    </div>
+  </form>`;
 }
 
 // ---------- diálogos ----------
@@ -961,6 +1004,52 @@ function kpi(label: string, value: string | number, hint: Safe | string = "", to
   </div>`;
 }
 
+interface PieSlice {
+  label: string;
+  value: number;
+  tone: string;
+}
+
+const PIE_RADIUS = 50;
+
+function pieChart(title: string, slices: PieSlice[]): Safe {
+  let total = 0;
+  for (const slice of slices) {
+    total += slice.value;
+  }
+  const shapes = pieShapes(
+    slices.map((s) => s.value),
+    PIE_RADIUS,
+  );
+  const drawn = slices.map((slice, index) => {
+    const shape = shapes[index];
+    if (!shape || shape.kind === "none") {
+      return html``;
+    }
+    return shape.kind === "circle"
+      ? html`<circle r="${PIE_RADIUS}" class="pie-${slice.tone}" />`
+      : html`<path d="${shape.d}" class="pie-${slice.tone}" />`;
+  });
+  return html`<figure class="pie">
+    <figcaption>${title} <b>${total}</b></figcaption>
+    <div class="pie-body">
+      <svg viewBox="-52 -52 104 104" role="img" aria-label="${title}: ${total}">
+        <circle r="${PIE_RADIUS}" class="pie-empty" />
+        ${drawn}
+      </svg>
+      <ul class="pie-legend">
+        ${slices.map(
+          (slice) =>
+            html`<li>
+              <i class="dot pie-${slice.tone}"></i>${slice.label}
+              <b>${slice.value}</b><span class="muted"> (${percentOf(slice.value, total)}%)</span>
+            </li>`,
+        )}
+      </ul>
+    </div>
+  </figure>`;
+}
+
 function reportLine(line: ReportLine): Safe {
   const { kind, days } = line.deadline;
   const tone = kind === "upcoming" && days <= 3 ? "soon" : kind;
@@ -996,10 +1085,22 @@ function reportCard(report: PersonReport): Safe {
     <header class="report-head">
       <h2>${person.name}</h2>
     </header>
+    <div class="pies">
+      ${pieChart("Tarefas", [
+        { label: "A fazer", value: ts.todo, tone: "todo" },
+        { label: "Em andamento", value: ts.doing, tone: "doing" },
+        { label: "Bloqueadas", value: ts.blocked, tone: "blocked" },
+        { label: "Concluídas", value: ts.done, tone: "done" },
+      ])}
+      ${pieChart("Subtarefas", [
+        { label: "Concluídas", value: ss.done, tone: "done" },
+        { label: "Em aberto", value: ss.open - ss.late, tone: "todo" },
+        { label: "Atrasadas", value: ss.late, tone: "late" },
+      ])}
+    </div>
     <div class="kpis">
-      ${kpi("Tarefas", ts.total, `${ts.doing} em andamento · ${ts.done} concluídas · ${ts.late} atrasadas`)}
       ${kpi("Progresso das tarefas", `${ts.progress}%`, progressBar(ts.progress))}
-      ${kpi("Subtarefas", ss.total, `${ss.done} concluídas · ${ss.open} em aberto · ${ss.late} atrasadas`)}
+      ${kpi("Atrasadas", ts.late + ss.late, "", ts.late + ss.late > 0 ? "bad" : "ok")}
       ${kpi("Maior atraso", report.maxLateDays > 0 ? `${report.maxLateDays} ${report.maxLateDays === 1 ? "dia" : "dias"}` : "Nenhum", "", report.maxLateDays > 0 ? "bad" : "ok")}
       ${kpi("Próximo prazo", nextValue, next?.title ?? "")}
       ${kpi("Vencem em até 7 dias", report.dueSoon)}
@@ -1033,7 +1134,7 @@ function reportCard(report: PersonReport): Safe {
 export function reportsView(): Safe {
   const me = currentUser();
   if (!canSeeReports(me)) {
-    return html`<p class="empty">Relatórios não estão disponíveis para o seu perfil.</p>`;
+    return html`<p class="empty">O relatório não está disponível para o seu perfil.</p>`;
   }
   const today = todayISO();
   const admin = me.role === "admin";

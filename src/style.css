@@ -1844,3 +1844,166 @@ dialog::backdrop {
     width: 100%;
   }
 }
+
+/* ---------- resumo: porcentagem ao lado do número ---------- */
+
+.stat-pct {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* ---------- relatório compacto (gráficos de pizza) ---------- */
+
+.reports {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  align-items: start;
+  gap: 10px;
+}
+
+.report {
+  padding: 10px 12px;
+  gap: 8px;
+}
+
+.report-head h2 {
+  font-size: 15px;
+}
+
+.pies {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.pie {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pie figcaption {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pie figcaption b {
+  color: var(--text);
+}
+
+.pie-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pie svg {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+}
+
+.pie-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.pie-legend .dot {
+  margin-right: 4px;
+}
+
+.pie-todo {
+  --pc: var(--st-todo);
+}
+
+.pie-doing {
+  --pc: var(--st-doing);
+}
+
+.pie-blocked {
+  --pc: var(--st-blocked);
+}
+
+.pie-done {
+  --pc: var(--st-done);
+}
+
+.pie-late {
+  --pc: var(--late);
+}
+
+svg .pie-todo,
+svg .pie-doing,
+svg .pie-blocked,
+svg .pie-done,
+svg .pie-late {
+  fill: var(--pc);
+  stroke: var(--surface);
+  stroke-width: 1;
+}
+
+svg .pie-empty {
+  fill: var(--surface-2);
+}
+
+.dot[class*="pie-"] {
+  background: var(--pc);
+}
+
+.kpis {
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 6px;
+}
+
+.kpi {
+  padding: 6px 8px;
+}
+
+.kpi-value {
+  font-size: 15px;
+}
+
+/* ---------- usuários compactos ---------- */
+
+.users-table th,
+.users-table td {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.users-table .col-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.users-table .col-actions .btn + .btn {
+  margin-left: 6px;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .users-table td {
+    padding: 6px 14px;
+  }
+
+  .users-table td.col-actions {
+    justify-content: flex-end;
+  }
+}

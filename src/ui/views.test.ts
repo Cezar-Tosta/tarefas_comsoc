@@ -13,6 +13,7 @@ import {
   summaryView,
   tasksView,
   toolbarView,
+  userDialog,
   usersView,
 } from "./views";
 
@@ -182,10 +183,25 @@ describe("ganttView", () => {
 });
 
 describe("usersView", () => {
-  it("locks the current user's own role select", () => {
+  it("lists everyone in a table with edit and delete buttons", () => {
     const out = usersView().value;
-    expect(out).toMatch(/data-id="a"[^>]*disabled/);
-    expect(out).not.toMatch(/data-id="u1"[^>]*disabled/);
+    expect(out).toContain('class="users-table"');
+    expect(out).toMatch(/data-action="edit-user"\s+data-id="u1"/);
+    expect(out).toMatch(/data-action="delete-user"\s+data-id="u1"/);
+  });
+
+  it("locks edit and delete on the current user's own row", () => {
+    const out = usersView().value;
+    expect(out).toMatch(/data-action="edit-user"\s+data-id="a"[^>]*disabled/);
+    expect(out).toMatch(/data-action="delete-user"\s+data-id="a"[^>]*disabled/);
+    expect(out).not.toMatch(/data-action="edit-user"\s+data-id="u1"[^>]*disabled/);
+  });
+
+  it("edits name and role in a dialog", () => {
+    const out = userDialog(ana).value;
+    expect(out).toContain('data-form="user" data-id="u1"');
+    expect(out).toContain('name="name"');
+    expect(out).toContain('name="role"');
   });
 });
 
@@ -345,6 +361,12 @@ describe("hide done", () => {
 describe("summary metrics per profile", () => {
   const TODAY = "2026-09-19";
 
+  it("shows each card's share of the total, except the Tarefas base card", () => {
+    const out = summaryView(TODAY).value;
+    expect(out.match(/stat-pct/g)).toHaveLength(3); // andamento, concluídas, atrasadas
+    expect(out).not.toMatch(/stat-value">2<small/);
+  });
+
   it("admin sees the general overview with every task", () => {
     const out = summaryView(TODAY).value;
     expect(out).toContain("Visão geral");
@@ -367,7 +389,25 @@ describe("summary metrics per profile", () => {
   });
 });
 
+describe("gantt toolbar", () => {
+  it("keeps only the filters: no new task, export or refresh", () => {
+    const out = toolbarView(false).value;
+    expect(out).toContain('data-filter="q"');
+    expect(out).toContain('data-filter="status"');
+    expect(out).not.toContain('data-action="new-task"');
+    expect(out).not.toContain('data-action="export-csv"');
+    expect(out).not.toContain('data-action="refresh"');
+  });
+});
+
 describe("reports tab", () => {
+  it("is named Relatório and shows pie charts", () => {
+    expect(shellView().value).toMatch(/data-view="reports"[^>]*>\s*Relatório\s*</);
+    const out = reportsView().value;
+    expect(out).toContain('class="pie"');
+    expect(out).toContain("<svg");
+  });
+
   it("is offered to admins and users, but not to viewers", () => {
     expect(shellView().value).toContain('data-view="reports"');
     as(ana);
@@ -403,7 +443,7 @@ describe("reports tab", () => {
 
   it("refuses viewers", () => {
     as(vera);
-    expect(reportsView().value).toContain("não estão disponíveis");
+    expect(reportsView().value).toContain("não está disponível");
   });
 });
 

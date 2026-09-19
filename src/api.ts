@@ -162,9 +162,18 @@ export async function deleteSubtask(id: string): Promise<void> {
   checkAffected(data, error);
 }
 
-export async function setRole(id: string, role: Role): Promise<void> {
-  const { data, error } = await db().from("profiles").update({ role }).eq("id", id).select("id");
+export async function updateProfile(
+  id: string,
+  changes: { name: string; role: Role },
+): Promise<void> {
+  const { data, error } = await db().from("profiles").update(changes).eq("id", id).select("id");
   checkAffected(data, error);
+}
+
+/** Exige a migração supabase/004_delete_user.sql. */
+export async function deleteUser(id: string): Promise<void> {
+  const { error } = await db().rpc("delete_user", { uid: id });
+  check(error);
 }
 
 // ---------- comentários e links ----------
