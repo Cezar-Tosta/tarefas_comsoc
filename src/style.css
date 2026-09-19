@@ -1590,3 +1590,182 @@ dialog::backdrop {
 .card-actions .btn {
   white-space: nowrap;
 }
+
+/* ---------- relatórios ---------- */
+
+.reports {
+  display: grid;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.report {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: grid;
+  gap: 12px;
+  box-shadow: var(--shadow);
+}
+
+.report-head h2 {
+  font-size: 16px;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.kpi {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.kpi-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.kpi-value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.kpi.bad .kpi-value {
+  color: var(--late);
+}
+
+.kpi.ok .kpi-value {
+  color: var(--st-done);
+}
+
+.kpi-hint {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.report-details > summary,
+.report-done > summary {
+  cursor: pointer;
+  font-weight: 600;
+  user-select: none;
+  padding: 4px 0;
+}
+
+.report-done {
+  margin-top: 8px;
+}
+
+.report-done > summary {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.rlines {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.rline {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.rline-main,
+.rline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.rline-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rline-dates {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.rline-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 110px;
+  font-size: 12px;
+}
+
+.badge.kind-subtask {
+  background: none;
+  border: 1px solid var(--line);
+}
+
+.deadline {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.deadline.dl-overdue {
+  background: color-mix(in srgb, var(--late) 16%, var(--surface));
+  color: var(--late);
+}
+
+.deadline.dl-today,
+.deadline.dl-soon {
+  background: color-mix(in srgb, var(--st-blocked) 20%, var(--surface));
+  color: var(--st-blocked);
+}
+
+.deadline.dl-upcoming {
+  background: color-mix(in srgb, var(--st-doing) 14%, var(--surface));
+  color: var(--st-doing);
+}
+
+.deadline.dl-done {
+  background: color-mix(in srgb, var(--st-done) 16%, var(--surface));
+  color: var(--st-done);
+}
+
+@media (max-width: 720px) {
+  .kpis {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .rline {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .rline-meta {
+    width: 100%;
+  }
+}

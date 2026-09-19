@@ -5,8 +5,8 @@ import { todayISO } from "./lib/dates";
 import { DEFAULT_FILTERS, filterTasks } from "./lib/filters";
 import type { Zoom } from "./lib/gantt";
 import { normalizeUrl } from "./lib/links";
-import { canManageUsers } from "./lib/permissions";
-import { savePrefs, state, type View } from "./state";
+import { canManageUsers, canSeeReports, visibleTasks } from "./lib/permissions";
+import { currentUser, savePrefs, state, type View } from "./state";
 import type { Priority, Role, Status, TaskInput } from "./types";
 import { html, mount, type Safe } from "./ui/html";
 import {
@@ -16,6 +16,7 @@ import {
   linkDialog,
   loginView,
   pendingView,
+  reportsView,
   setupView,
   shellView,
   subtaskDialog,
@@ -93,7 +94,10 @@ export function render(): void {
       return;
     case "main":
       mount(app, shellView());
-      mount(byId("toolbar"), state.view === "users" ? html`` : toolbarView());
+      mount(
+        byId("toolbar"),
+        state.view === "users" || state.view === "reports" ? html`` : toolbarView(),
+      );
       renderContent();
       return;
   }
@@ -105,6 +109,8 @@ function renderContent(): void {
   let content: Safe;
   if (state.view === "gantt") {
     content = ganttView();
+  } else if (state.view === "reports") {
+    content = reportsView();
   } else if (state.view === "users") {
     content = usersView();
   } else {
@@ -129,13 +135,13 @@ function scrollGanttToToday(): void {
 
 async function loadTasks(): Promise<void> {
   const { tasks, extras } = await api.fetchTasks();
-  state.tasks = tasks;
+  state.tasks = visibleTasks(currentUser(), tasks);
   state.extras = extras;
 }
 
 async function loadAll(): Promise<void> {
   const [loaded, profiles] = await Promise.all([api.fetchTasks(), api.fetchProfiles()]);
-  state.tasks = loaded.tasks;
+  state.tasks = visibleTasks(currentUser(), loaded.tasks);
   state.extras = loaded.extras;
   state.profiles = profiles;
 }
@@ -169,6 +175,12 @@ export async function boot(): Promise<void> {
     await loadAll();
     if (state.view === "users" && !canManageUsers(profile)) {
       state.view = "tasks";
+    }
+    if (state.view === "reports" && !canSeeReports(profile)) {
+      state.view = "tasks";
+    }
+    if (profile.role === "user") {
+      state.openReports.add(profile.id); // o usuário já vê o próprio detalhamento aberto
     }
     state.screen = "main";
     render();
@@ -686,6 +698,17 @@ export function bindEvents(): void {
     "toggle",
     (event) => {
       const el = event.target;
+      if (el instanceof HTMLDetailsElement && el.classList.contains("report-details")) {
+        const reportId = el.dataset["report"];
+        if (reportId) {
+          if (el.open) {
+            state.openReports.add(reportId);
+          } else {
+            state.openReports.delete(reportId);
+          }
+        }
+        return;
+      }
       if (!(el instanceof HTMLDetailsElement) || !el.classList.contains("done-group")) {
         return;
       }

@@ -12,6 +12,8 @@ Front-end estático (Vite + TypeScript, sem framework) e **Supabase** como backe
 - **Filtros** (valem para lista, Gantt e exportação): busca, status (inclui "atrasadas"), responsável, prioridade, período, ocultar concluídas. Ficam salvos no navegador.
 - **Comentários** em cada tarefa, em formato de chat (atualiza sozinho a cada 8 s enquanto aberto). Administradores e usuários comentam; visualizadores só leem. Apaga quem escreveu ou um administrador. Links coladas no texto viram clicáveis.
 - **Links** anexados à tarefa (título opcional; só http/https). Quem edita a tarefa adiciona e remove.
+- **Relatórios**: o administrador vê o andamento por pessoa (tarefas e subtarefas, atrasos, próximos prazos); cada usuário vê o seu. Mostra dias de atraso, dias que faltam, maior atraso e o que vence em 7 dias. Visualizadores não têm essa aba.
+- **Visibilidade**: o usuário só vê tarefas em que é responsável (pela tarefa ou por uma subtarefa). Sem nada atribuído, as abas ficam vazias com um aviso. Administrador e visualizador veem tudo.
 - **Exportar CSV** (abre direto no Excel).
 - **Perfis**:
 
@@ -28,7 +30,7 @@ Front-end estático (Vite + TypeScript, sem framework) e **Supabase** como backe
 ## Configuração (uma vez)
 
 1. Crie um projeto em <https://supabase.com>.
-2. No **SQL Editor**, cole e execute o **conteúdo** de `supabase/schema.sql` e, em seguida, de `supabase/002_comments_links.sql` (comentários e links). Rode cada um uma vez, nessa ordem.
+2. No **SQL Editor**, cole e execute o **conteúdo** de `supabase/schema.sql` e, em seguida, de `supabase/002_comments_links.sql` (comentários e links) e `supabase/003_user_visibility.sql` (cada usuário só enxerga o que está ligado a ele). Rode cada um, nessa ordem.
 3. Em **Authentication → Providers → Email**, decida se exige confirmação de e-mail
    (desligar simplifica o primeiro acesso; ligar é mais seguro). Em **Authentication → URL Configuration**,
    coloque a URL do seu Pages (`https://<usuario>.github.io/<repo>/`) em _Site URL_.

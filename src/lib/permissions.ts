@@ -1,4 +1,5 @@
 import type { Profile, Subtask, Task } from "../types";
+import { involvesPerson } from "./filters";
 
 // Espelha as políticas RLS de supabase/schema.sql. A segurança real está no banco;
 // estas funções só decidem o que mostrar na interface.
@@ -13,6 +14,11 @@ export function canDeleteTask(me: Profile): boolean {
 
 export function canAssign(me: Profile): boolean {
   return me.role === "admin";
+}
+
+/** Aba Relatórios: administrador (visão da equipe) e usuário (visão própria). */
+export function canSeeReports(me: Profile): boolean {
+  return me.role === "admin" || me.role === "user";
 }
 
 export function canManageUsers(me: Profile): boolean {
@@ -54,4 +60,19 @@ export function canToggleSubtask(me: Profile, task: Task, subtask: Subtask): boo
     return true;
   }
   return me.role === "user" && subtask.assignee_id === me.id;
+}
+
+/**
+ * O que cada perfil enxerga nas abas Tarefas/Gantt: o usuário só vê o que está ligado a ele
+ * (tarefa dele ou com subtarefa dele); administrador e visualizador veem tudo.
+ * O banco aplica a mesma regra (supabase/003_user_visibility.sql); aqui é o reflexo na interface.
+ */
+export function visibleTasks(me: Profile, tasks: Task[]): Task[] {
+  if (me.role === "admin" || me.role === "viewer") {
+    return tasks;
+  }
+  if (me.role === "user") {
+    return tasks.filter((task) => involvesPerson(task, me.id));
+  }
+  return [];
 }

@@ -2,7 +2,7 @@ import { DEFAULT_FILTERS, type Filters } from "./lib/filters";
 import type { Zoom } from "./lib/gantt";
 import type { Comment, Profile, Task } from "./types";
 
-export type View = "tasks" | "gantt" | "users";
+export type View = "tasks" | "gantt" | "reports" | "users";
 export type Screen = "loading" | "setup" | "login" | "pending" | "main";
 
 export interface State {
@@ -25,6 +25,8 @@ export interface State {
   comments: Comment[];
   /** Tarefas cujo grupo "Concluídas" está aberto. */
   openDone: Set<string>;
+  /** Relatórios (por pessoa) com o detalhamento aberto. */
+  openReports: Set<string>;
 }
 
 export const state: State = {
@@ -43,6 +45,7 @@ export const state: State = {
   chatTaskId: null,
   comments: [],
   openDone: new Set(),
+  openReports: new Set(),
 };
 
 export function currentUser(): Profile {
@@ -53,7 +56,7 @@ export function currentUser(): Profile {
 }
 
 const PREFS_KEY = "tarefas-comsoc:prefs";
-const VIEWS: View[] = ["tasks", "gantt", "users"];
+const VIEWS: View[] = ["tasks", "gantt", "reports", "users"];
 const ZOOMS: Zoom[] = ["day", "week", "month"];
 
 export function loadPrefs(): void {

@@ -4,6 +4,13 @@ import { hostLabel, isHttpUrl } from "../lib/links";
 import { filterTasks } from "../lib/filters";
 import { computeMetrics, metricsScope } from "../lib/metrics";
 import {
+  buildPersonReport,
+  buildTeamReport,
+  deadlineLabel,
+  type PersonReport,
+  type ReportLine,
+} from "../lib/reports";
+import {
   barGeometry,
   buildGanttItems,
   buildScale,
@@ -21,6 +28,7 @@ import {
   canManageLinks,
   canManageSubtasks,
   canManageUsers,
+  canSeeReports,
   canToggleSubtask,
 } from "../lib/permissions";
 import { effectiveStatus, isOverdue, splitSubtasks, taskProgress } from "../lib/progress";
@@ -28,6 +36,15 @@ import { currentUser, state, type View } from "../state";
 import type { Comment, Profile, Subtask, Task, TaskLink } from "../types";
 import { html, raw, type Safe } from "./html";
 import { linkify } from "./linkify";
+
+function emptyMessage(me: Profile): string {
+  if (me.role === "user") {
+    return "Você ainda não tem tarefas atribuídas. Quando um administrador atribuir uma tarefa ou subtarefa a você, ela aparecerá aqui.";
+  }
+  return canCreateTask(me)
+    ? "Nenhuma tarefa cadastrada ainda. Use “+ Nova tarefa” para começar."
+    : "Nenhuma tarefa cadastrada ainda.";
+}
 
 function personName(id: string | null): string {
   if (!id) {
@@ -151,6 +168,7 @@ export function shellView(): Safe {
       <h1>Tarefas COMSOC</h1>
       <nav class="tabs" aria-label="Seções">
         ${navTab("tasks", "Tarefas")} ${navTab("gantt", "Gantt")}
+        ${canSeeReports(me) && navTab("reports", "Relatórios")}
         ${canManageUsers(me) && navTab("users", "Usuários")}
       </nav>
       <div class="who">
@@ -514,10 +532,7 @@ export function tasksView(): Safe {
   const me = currentUser();
   const visible = filterTasks(state.tasks, state.filters, todayISO());
   if (state.tasks.length === 0) {
-    return html`<p class="empty">
-      Nenhuma tarefa cadastrada ainda.
-      ${canCreateTask(me) ? "Use “+ Nova tarefa” para começar." : ""}
-    </p>`;
+    return html`<p class="empty">${emptyMessage(me)}</p>`;
   }
   return html`<p class="count">${visible.length} de ${state.tasks.length} tarefas</p>
     ${
@@ -578,7 +593,9 @@ export function ganttView(): Safe {
 
   if (items.length === 0) {
     return html`${controls}
-      <p class="empty">Nenhuma tarefa com datas para exibir no Gantt.</p>
+      <p class="empty">
+        ${state.tasks.length === 0 ? emptyMessage(me) : "Nenhuma tarefa com datas para exibir no Gantt."}
+      </p>
       ${undatedNote(undated)}`;
   }
 
@@ -922,4 +939,103 @@ export function commentsDialog(task: Task, comments: Comment[]): Safe {
       <button class="btn" type="button" data-action="close-dialog">Fechar</button>
     </div>
   </section>`;
+}
+
+// ---------- relatórios ----------
+
+function kpi(label: string, value: string | number, hint: Safe | string = "", tone = ""): Safe {
+  return html`<div class="kpi ${tone}">
+    <span class="kpi-label">${label}</span>
+    <span class="kpi-value">${value}</span>
+    ${hint !== "" && html`<span class="kpi-hint">${hint}</span>`}
+  </div>`;
+}
+
+function reportLine(line: ReportLine): Safe {
+  const { kind, days } = line.deadline;
+  const tone = kind === "upcoming" && days <= 3 ? "soon" : kind;
+  return html`<li class="rline">
+    <div class="rline-main">
+      <span class="badge kind-${line.kind}">${line.kind === "task" ? "Tarefa" : "Subtarefa"}</span>
+      <span class="rline-title">${line.title}</span>
+      ${line.parentTitle && html`<span class="muted small">em ${line.parentTitle}</span>`}
+    </div>
+    <div class="rline-meta">
+      <span class="badge st-${line.status}">${STATUS_LABEL[line.status]}</span>
+      ${line.kind === "task" && html`<span class="rline-progress">${progressBar(line.progress)} <b>${line.progress}%</b></span>`}
+      <span class="rline-dates"
+        >${period(line.start, line.end)}${line.inheritedDates && " (prazo da tarefa)"}</span
+      >
+      <span class="deadline dl-${tone}">${deadlineLabel(line.deadline)}</span>
+    </div>
+  </li>`;
+}
+
+function reportCard(report: PersonReport): Safe {
+  const { taskStats: ts, subtaskStats: ss, person } = report;
+  const open = report.lines.filter((line) => line.deadline.kind !== "done");
+  const done = report.lines.filter((line) => line.deadline.kind === "done");
+  const next = report.nextDue;
+  const nextValue =
+    next === null
+      ? "—"
+      : next.days === 0
+        ? "Hoje"
+        : `Em ${next.days} ${next.days === 1 ? "dia" : "dias"}`;
+  return html`<article class="report">
+    <header class="report-head">
+      <h2>${person.name}</h2>
+    </header>
+    <div class="kpis">
+      ${kpi("Tarefas", ts.total, `${ts.doing} em andamento · ${ts.done} concluídas · ${ts.late} atrasadas`)}
+      ${kpi("Progresso das tarefas", `${ts.progress}%`, progressBar(ts.progress))}
+      ${kpi("Subtarefas", ss.total, `${ss.done} concluídas · ${ss.open} em aberto · ${ss.late} atrasadas`)}
+      ${kpi("Maior atraso", report.maxLateDays > 0 ? `${report.maxLateDays} ${report.maxLateDays === 1 ? "dia" : "dias"}` : "Nenhum", "", report.maxLateDays > 0 ? "bad" : "ok")}
+      ${kpi("Próximo prazo", nextValue, next?.title ?? "")}
+      ${kpi("Vencem em até 7 dias", report.dueSoon)}
+    </div>
+    <details
+      class="report-details"
+      data-report="${person.id}"
+      ${state.openReports.has(person.id) && raw("open")}
+    >
+      <summary>Tarefas e subtarefas (${report.lines.length})</summary>
+      ${
+        report.lines.length === 0
+          ? html`<p class="muted">Nada atribuído.</p>`
+          : html`
+              ${open.length > 0 ? html`<ul class="rlines">${open.map(reportLine)}</ul>` : html`<p class="muted">Nada em aberto.</p>`}
+              ${
+                done.length > 0 &&
+                html`<details class="report-done">
+                  <summary>Concluídas (${done.length})</summary>
+                  <ul class="rlines">
+                    ${done.map(reportLine)}
+                  </ul>
+                </details>`
+              }
+            `
+      }
+    </details>
+  </article>`;
+}
+
+export function reportsView(): Safe {
+  const me = currentUser();
+  if (!canSeeReports(me)) {
+    return html`<p class="empty">Relatórios não estão disponíveis para o seu perfil.</p>`;
+  }
+  const today = todayISO();
+  const admin = me.role === "admin";
+  const reports = admin
+    ? buildTeamReport(state.profiles, state.tasks, today)
+    : [buildPersonReport({ id: me.id, name: me.name || me.email }, state.tasks, today)];
+  const [only] = reports;
+  const nothing = !admin && only !== undefined && only.lines.length === 0;
+  return html`<p class="muted small">
+      ${admin ? "Andamento por pessoa, de quem tem mais itens atrasados para quem tem menos." : "Como estão as suas tarefas e subtarefas."}
+      Referência: hoje, ${formatBR(today)}. Subtarefas sem data usam o prazo da tarefa.
+    </p>
+    ${nothing && html`<p class="empty">${emptyMessage(me)}</p>`}
+    <div class="reports">${reports.map(reportCard)}</div>`;
 }

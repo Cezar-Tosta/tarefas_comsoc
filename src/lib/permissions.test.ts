@@ -10,7 +10,9 @@ import {
   canManageLinks,
   canManageSubtasks,
   canManageUsers,
+  canSeeReports,
   canToggleSubtask,
+  visibleTasks,
 } from "./permissions";
 
 const admin: Profile = { id: "a", email: "a@x", name: "A", role: "admin" };
@@ -102,5 +104,29 @@ describe("permissions", () => {
     expect(canManageLinks(user, t("o"))).toBe(false);
     expect(canManageLinks(admin, t("o"))).toBe(true);
     expect(canManageLinks(viewer, t("v"))).toBe(false);
+  });
+
+  it("a user sees only tasks linked to them (own task or own subtask); others see everything", () => {
+    const mine = t("u");
+    const viaSubtask = t("o", [s("u")]);
+    const foreign = t("o", [s("o")]);
+    const nobody = t(null);
+    const all = [mine, viaSubtask, foreign, nobody];
+    expect(visibleTasks(user, all)).toEqual([mine, viaSubtask]);
+    expect(visibleTasks(admin, all)).toEqual(all);
+    expect(visibleTasks(viewer, all)).toEqual(all);
+    expect(visibleTasks(pending, all)).toEqual([]);
+  });
+
+  it("a brand new user with nothing assigned sees no tasks", () => {
+    const fresh: Profile = { id: "new", email: "n@x", name: "N", role: "user" };
+    expect(visibleTasks(fresh, [t("u"), t("o", [s("o")])])).toEqual([]);
+  });
+
+  it("reports are for admins (team) and users (own); not for viewers or pending", () => {
+    expect(canSeeReports(admin)).toBe(true);
+    expect(canSeeReports(user)).toBe(true);
+    expect(canSeeReports(viewer)).toBe(false);
+    expect(canSeeReports(pending)).toBe(false);
   });
 });

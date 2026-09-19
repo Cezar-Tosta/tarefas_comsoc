@@ -6,6 +6,8 @@ import {
   commentsDialog,
   ganttView,
   linkDialog,
+  reportsView,
+  shellView,
   summaryView,
   tasksView,
   toolbarView,
@@ -360,5 +362,57 @@ describe("summary metrics per profile", () => {
   it("a viewer sees no metrics at all", () => {
     as(vera);
     expect(summaryView(TODAY).value).toBe("");
+  });
+});
+
+describe("reports tab", () => {
+  it("is offered to admins and users, but not to viewers", () => {
+    expect(shellView().value).toContain('data-view="reports"');
+    as(ana);
+    expect(shellView().value).toContain('data-view="reports"');
+    as(vera);
+    expect(shellView().value).not.toContain('data-view="reports"');
+  });
+
+  it("gives the admin one card per person with the deadline breakdown", () => {
+    const out = reportsView().value;
+    expect(out).toContain("Andamento por pessoa");
+    for (const name of ["Ada", "Ana", "Bia"]) {
+      expect(out).toContain(`<h2>${name}</h2>`);
+    }
+    expect(out).toContain("Maior atraso");
+    expect(out).toContain("Próximo prazo");
+    expect(out).toContain("Vencem em até 7 dias");
+    expect(out).toContain("Tarefas e subtarefas (");
+  });
+
+  it("gives a user only their own report, already expanded", () => {
+    as(ana);
+    state.openReports = new Set(["u1"]);
+    const out = reportsView().value;
+    expect(out).toContain("Como estão as suas tarefas e subtarefas");
+    expect(out).toContain("<h2>Ana</h2>");
+    expect(out).not.toContain("<h2>Bia</h2>");
+    expect(out).not.toContain("<h2>Ada</h2>");
+    expect(out).toMatch(/<details\s+class="report-details"[^>]*\sopen/);
+    expect(out).toContain("Escrever"); // subtarefa atribuída a ela
+    state.openReports = new Set();
+  });
+
+  it("refuses viewers", () => {
+    as(vera);
+    expect(reportsView().value).toContain("não estão disponíveis");
+  });
+});
+
+describe("a user with nothing assigned", () => {
+  it("sees a friendly empty state on Tarefas, Gantt and Relatórios", () => {
+    as(ana);
+    state.tasks = [];
+    expect(tasksView().value).toContain("Você ainda não tem tarefas atribuídas");
+    expect(ganttView().value).toContain("Você ainda não tem tarefas atribuídas");
+    const report = reportsView().value;
+    expect(report).toContain("Você ainda não tem tarefas atribuídas");
+    expect(report).toContain("Nada atribuído");
   });
 });
