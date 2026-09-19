@@ -313,3 +313,26 @@ describe("without the comments/links migration", () => {
     expect(out).not.toContain("add-link");
   });
 });
+
+describe("hide done", () => {
+  it("also hides done subtasks in the task list", () => {
+    state.filters = { ...state.filters, hideDone: true };
+    const hidden = tasksView().value;
+    state.filters = { ...state.filters, hideDone: false };
+    const shown = tasksView().value;
+    expect(shown).toContain("Coletar dados");
+    expect(shown).toContain("Concluídas (1)");
+    expect(hidden).not.toContain("Coletar dados");
+    expect(hidden).not.toContain("done-group");
+    expect(hidden).toContain("Escrever"); // subtarefa em aberto continua
+    expect(hidden).toContain("1/2 subtarefas"); // o progresso continua contando as concluídas
+  });
+
+  it("also hides done subtasks in the Gantt", () => {
+    state.filters = { ...state.filters, hideDone: true };
+    const hidden = ganttView().value;
+    state.filters = { ...state.filters, hideDone: false };
+    expect(hidden).not.toContain("Coletar dados");
+    expect(hidden).toContain("Escrever");
+  });
+});

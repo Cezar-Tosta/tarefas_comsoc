@@ -409,6 +409,7 @@ function taskCard(me: Profile, task: Task): Safe {
   const percent = taskProgress(task);
   const late = isOverdue(task, todayISO());
   const { open, done } = splitSubtasks(task.subtasks);
+  const showDoneGroup = done.length > 0 && !state.filters.hideDone;
   const canEdit = canEditTask(me, task);
   const canAddSub = canManageSubtasks(me, task);
   return html`<article class="card status-${status} ${late && "is-late"}">
@@ -507,7 +508,7 @@ function taskCard(me: Profile, task: Task): Safe {
       </form>`
     }
     ${
-      done.length > 0 &&
+      showDoneGroup &&
       html`<details
         class="done-group"
         data-task="${task.id}"
@@ -547,7 +548,12 @@ export function ganttView(): Safe {
   const me = currentUser();
   const today = todayISO();
   const visible = filterTasks(state.tasks, state.filters, today);
-  const { items, undated } = buildGanttItems(visible, state.showSubtasks, today);
+  const { items, undated } = buildGanttItems(
+    visible,
+    state.showSubtasks,
+    today,
+    state.filters.hideDone,
+  );
   const zoom = state.zoom;
   const px = PX_PER_DAY[zoom];
   const range = computeRange(items, today, zoom);

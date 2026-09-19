@@ -170,4 +170,35 @@ describe("buildGanttItems", () => {
       inherited: true,
     });
   });
+
+  it("omits done subtasks when hiding done items", () => {
+    const t = task("a", {
+      start_date: "2026-09-01",
+      end_date: "2026-09-30",
+      subtasks: [
+        {
+          id: "s1",
+          task_id: "a",
+          title: "feita",
+          done: true,
+          start_date: "2026-09-02",
+          end_date: "2026-09-04",
+          assignee_id: null,
+          position: 0,
+        },
+        {
+          id: "s2",
+          task_id: "a",
+          title: "aberta",
+          done: false,
+          start_date: "2026-09-05",
+          end_date: "2026-09-08",
+          assignee_id: null,
+          position: 1,
+        },
+      ],
+    });
+    expect(buildGanttItems([t], true, today, true).items.map((i) => i.id)).toEqual(["a", "s2"]);
+    expect(buildGanttItems([t], true, today).items.map((i) => i.id)).toEqual(["a", "s1", "s2"]);
+  });
 });

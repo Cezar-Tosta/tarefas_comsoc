@@ -47,6 +47,7 @@ export function buildGanttItems(
   tasks: Task[],
   showSubtasks: boolean,
   today: string,
+  hideDoneSubtasks = false,
 ): { items: GanttItem[]; undated: Task[] } {
   const items: GanttItem[] = [];
   const undated: Task[] = [];
@@ -75,6 +76,9 @@ export function buildGanttItems(
       continue;
     }
     for (const subtask of task.subtasks) {
+      if (hideDoneSubtasks && subtask.done) {
+        continue;
+      }
       const subStart = subtask.start_date ?? subtask.end_date ?? start;
       const subEnd = subtask.end_date ?? subtask.start_date ?? end;
       items.push({
