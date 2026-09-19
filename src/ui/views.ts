@@ -1,5 +1,6 @@
 import { PRIORITIES, PRIORITY_LABEL, ROLE_LABEL, ROLES, STATUS_LABEL, STATUSES } from "../labels";
-import { formatBR, todayISO } from "../lib/dates";
+import { formatBR, formatDateTimeBR, todayISO } from "../lib/dates";
+import { hostLabel, isHttpUrl } from "../lib/links";
 import { filterTasks } from "../lib/filters";
 import {
   barGeometry,
@@ -11,9 +12,12 @@ import {
 } from "../lib/gantt";
 import {
   canAssign,
+  canComment,
   canCreateTask,
+  canDeleteComment,
   canDeleteTask,
   canEditTask,
+  canManageLinks,
   canManageSubtasks,
   canManageUsers,
   canToggleSubtask,
@@ -26,8 +30,9 @@ import {
   taskProgress,
 } from "../lib/progress";
 import { currentUser, state, type View } from "../state";
-import type { Profile, Subtask, Task } from "../types";
+import type { Comment, Profile, Subtask, Task, TaskLink } from "../types";
 import { html, raw, type Safe } from "./html";
+import { linkify } from "./linkify";
 
 function personName(id: string | null): string {
   if (!id) {
@@ -213,50 +218,64 @@ export function summaryView(today: string): Safe {
 export function toolbarView(): Safe {
   const me = currentUser();
   const f = state.filters;
+  const active = activeFilterCount(f);
   return html`<div class="toolbar">
-    <label class="field grow"
-      >Buscar
-      <input
-        type="search"
-        data-filter="q"
-        value="${f.q}"
-        placeholder="Título, descrição ou subtarefa"
-      />
-    </label>
-    <label class="field"
-      >Status
-      <select data-filter="status">
-        ${opt("all", "Todos", f.status)} ${STATUSES.map((s) => opt(s, STATUS_LABEL[s], f.status))}
-        ${opt("overdue", "Atrasadas", f.status)}
-      </select>
-    </label>
-    <label class="field"
-      >Responsável
-      <select data-filter="assignee">
-        ${opt("all", "Todos", f.assignee)} ${opt("none", "Sem responsável", f.assignee)}
-        ${activePeople().map((p) => opt(p.id, p.name || p.email, f.assignee))}
-      </select>
-    </label>
-    <label class="field"
-      >Prioridade
-      <select data-filter="priority">
-        ${opt("all", "Todas", f.priority)}
-        ${PRIORITIES.map((p) => opt(p, PRIORITY_LABEL[p], f.priority))}
-      </select>
-    </label>
-    <label class="field"
-      >De
-      <input type="date" data-filter="from" value="${f.from}" />
-    </label>
-    <label class="field"
-      >Até
-      <input type="date" data-filter="to" value="${f.to}" />
-    </label>
-    <label class="check">
-      <input type="checkbox" data-filter="hideDone" ${f.hideDone && raw("checked")} />
-      Ocultar concluídas
-    </label>
-    <button class="btn small" type="button" data-action="reset-filters">Limpar</button>
+    <div class="toolbar-top">
+      <label class="field grow"
+        >Buscar
+        <input
+          type="search"
+          data-filter="q"
+          value="${f.q}"
+          placeholder="Título, descrição ou subtarefa"
+        />
+      </label>
+      <button
+        class="btn filters-toggle"
+        type="button"
+        data-action="toggle-filters"
+        aria-expanded="${state.filtersOpen}"
+        aria-controls="filters-panel"
+      >
+        Filtros${active > 0 && html` <span class="count-pill">${active}</span>`}
+      </button>
+    </div>
+    <div id="filters-panel" class="filters-panel ${state.filtersOpen && "open"}">
+      <label class="field"
+        >Status
+        <select data-filter="status">
+          ${opt("all", "Todos", f.status)} ${STATUSES.map((s) => opt(s, STATUS_LABEL[s], f.status))}
+          ${opt("overdue", "Atrasadas", f.status)}
+        </select>
+      </label>
+      <label class="field"
+        >Responsável
+        <select data-filter="assignee">
+          ${opt("all", "Todos", f.assignee)} ${opt("none", "Sem responsável", f.assignee)}
+          ${activePeople().map((p) => opt(p.id, p.name || p.email, f.assignee))}
+        </select>
+      </label>
+      <label class="field"
+        >Prioridade
+        <select data-filter="priority">
+          ${opt("all", "Todas", f.priority)}
+          ${PRIORITIES.map((p) => opt(p, PRIORITY_LABEL[p], f.priority))}
+        </select>
+      </label>
+      <label class="field"
+        >De
+        <input type="date" data-filter="from" value="${f.from}" />
+      </label>
+      <label class="field"
+        >Até
+        <input type="date" data-filter="to" value="${f.to}" />
+      </label>
+      <label class="check">
+        <input type="checkbox" data-filter="hideDone" ${f.hideDone && raw("checked")} />
+        Ocultar concluídas
+      </label>
+      <button class="btn small" type="button" data-action="reset-filters">Limpar filtros</button>
+    </div>
     <div class="toolbar-actions">
       ${
         canCreateTask(me) &&
@@ -270,6 +289,24 @@ export function toolbarView(): Safe {
       </button>
     </div>
   </div>`;
+}
+
+/** Quantos filtros (além da busca) estão ativos: aparece no botão "Filtros" do celular. */
+function activeFilterCount(f: typeof state.filters): number {
+  let count = 0;
+  for (const changed of [
+    f.status !== "all",
+    f.assignee !== "all",
+    f.priority !== "all",
+    f.from !== "",
+    f.to !== "",
+    f.hideDone,
+  ]) {
+    if (changed) {
+      count++;
+    }
+  }
+  return count;
 }
 
 // ---------- lista de tarefas ----------
@@ -341,6 +378,32 @@ function subtaskRow(me: Profile, task: Task, subtask: Subtask): Safe {
   </li>`;
 }
 
+function linkChip(link: TaskLink, removable: boolean): Safe {
+  const label = link.title || hostLabel(link.url);
+  return html`<span class="link-chip">
+    ${
+      isHttpUrl(link.url)
+        ? html`<a href="${link.url}" target="_blank" rel="noopener noreferrer" title="${link.url}"
+            >${label}</a
+          >`
+        : html`<span>${label}</span>`
+    }
+    ${
+      removable &&
+      html`<button
+        class="icon"
+        type="button"
+        data-action="delete-link"
+        data-id="${link.id}"
+        aria-label="Remover link ${label}"
+        title="Remover link"
+      >
+        ✕
+      </button>`
+    }
+  </span>`;
+}
+
 function taskCard(me: Profile, task: Task): Safe {
   const status = effectiveStatus(task);
   const percent = taskProgress(task);
@@ -361,6 +424,9 @@ function taskCard(me: Profile, task: Task): Safe {
         </div>
       </div>
       <div class="card-actions">
+        <button class="btn small" type="button" data-action="open-comments" data-id="${task.id}">
+          Comentários${task.comment_count > 0 && html` <span class="count-pill">${task.comment_count}</span>`}
+        </button>
         ${
           canEdit &&
           html`<button class="btn small" type="button" data-action="edit-task" data-id="${task.id}">
@@ -380,7 +446,19 @@ function taskCard(me: Profile, task: Task): Safe {
         }
       </div>
     </header>
-    ${task.description && html`<p class="desc">${task.description}</p>`}
+    ${task.description && html`<p class="desc">${linkify(task.description)}</p>`}
+    ${
+      (task.links.length > 0 || canManageLinks(me, task)) &&
+      html`<div class="links">
+        ${task.links.map((link) => linkChip(link, canManageLinks(me, task)))}
+        ${
+          canManageLinks(me, task) &&
+          html`<button class="chip-btn" type="button" data-action="add-link" data-id="${task.id}">
+            + Link
+          </button>`
+        }
+      </div>`
+    }
     <dl class="meta">
       <div>
         <dt>Responsável</dt>
@@ -513,11 +591,11 @@ export function ganttView(): Safe {
           )
       : false;
     const action = item.kind === "task" ? "edit-task" : "edit-sub";
+    const detail = item.inherited
+      ? "Subtarefa · sem datas próprias (usa as da tarefa)"
+      : `${item.kind === "task" ? personName(task?.assignee_id ?? null) : "Subtarefa"} · ${formatBR(item.start)} – ${formatBR(item.end)}`;
     const label = html`<span class="g-title">${item.title}</span>
-      <span class="g-sub"
-        >${item.kind === "task" ? personName(task?.assignee_id ?? null) : "Subtarefa"} ·
-        ${formatBR(item.start)} – ${formatBR(item.end)}</span
-      >`;
+      <span class="g-sub">${detail}</span>`;
     const tone = item.overdue ? "late" : `st-${item.status}`;
     return html`<div class="g-row ${item.kind === "subtask" && "is-sub"}">
       <div class="g-label">
@@ -537,9 +615,9 @@ export function ganttView(): Safe {
       <div class="g-track">
         <i class="g-today" style="left:${todayLeft + px / 2}px"></i>
         <div
-          class="bar ${tone} ${item.kind === "subtask" && "bar-sub"}"
+          class="bar ${tone} ${item.kind === "subtask" && "bar-sub"} ${item.inherited && "bar-inherited"}"
           style="left:${bar.left}px;width:${bar.width}px"
-          title="${item.title}: ${formatBR(item.start)} – ${formatBR(item.end)} (${item.progress}%)"
+          title="${item.title}: ${item.inherited ? "período da tarefa" : `${formatBR(item.start)} – ${formatBR(item.end)}`} (${item.progress}%)"
         >
           <div class="bar-fill" style="width:${item.progress}%"></div>
           ${bar.width >= 44 && html`<span class="bar-text">${item.progress}%</span>`}
@@ -612,9 +690,9 @@ export function usersView(): Safe {
         <tbody>
           ${state.profiles.map(
             (p) => html`<tr>
-              <td>${p.name || "—"}${p.id === me.id && html` <span class="chip">você</span>`}</td>
-              <td>${p.email}</td>
-              <td>
+              <td data-label="Nome">${p.name || "—"}${p.id === me.id && html` <span class="chip">você</span>`}</td>
+              <td data-label="E-mail">${p.email}</td>
+              <td data-label="Perfil">
                 <select
                   data-action="set-role"
                   data-id="${p.id}"
@@ -745,4 +823,99 @@ export function subtaskDialog(task: Task, subtask: Subtask): Safe {
       <button class="btn primary" type="submit">Salvar</button>
     </div>
   </form>`;
+}
+
+export function linkDialog(task: Task): Safe {
+  return html`<form data-form="link" data-task="${task.id}" class="stack">
+    <h2>Adicionar link</h2>
+    <p class="muted small">Tarefa: ${task.title}</p>
+    <label
+      >Endereço (URL)
+      <input name="url" required inputmode="url" placeholder="https://…" maxlength="2000" />
+    </label>
+    <label
+      >Título (opcional)
+      <input name="title" maxlength="120" placeholder="Ex.: Planilha de custos" />
+    </label>
+    <p class="form-error" data-error role="alert"></p>
+    <div class="row end">
+      <button class="btn" type="button" data-action="close-dialog">Cancelar</button>
+      <button class="btn primary" type="submit">Adicionar</button>
+    </div>
+  </form>`;
+}
+
+function authorName(id: string | null): string {
+  if (!id) {
+    return "Usuário removido";
+  }
+  const person = state.profiles.find((p) => p.id === id);
+  return person ? person.name || person.email : "Usuário removido";
+}
+
+function chatMessage(me: Profile, comment: Comment): Safe {
+  const mine = comment.author_id === me.id;
+  return html`<div class="msg ${mine && "mine"}">
+    <div class="msg-meta">
+      <strong>${authorName(comment.author_id)}</strong>
+      <time datetime="${comment.created_at}">${formatDateTimeBR(comment.created_at)}</time>
+      ${
+        canDeleteComment(me, comment) &&
+        html`<button
+          class="icon danger"
+          type="button"
+          data-action="delete-comment"
+          data-id="${comment.id}"
+          aria-label="Apagar comentário"
+          title="Apagar"
+        >
+          ✕
+        </button>`
+      }
+    </div>
+    <div class="msg-body">${linkify(comment.body)}</div>
+  </div>`;
+}
+
+export function chatMessages(comments: Comment[]): Safe {
+  const me = currentUser();
+  if (comments.length === 0) {
+    return html`<p class="empty small">Nenhum comentário ainda. Comece a conversa!</p>`;
+  }
+  return html`${comments.map((c) => chatMessage(me, c))}`;
+}
+
+export function commentsDialog(task: Task, comments: Comment[]): Safe {
+  const me = currentUser();
+  return html`<section class="chat">
+    <header>
+      <h2>Comentários</h2>
+      <p class="muted small">${task.title}</p>
+    </header>
+    <div id="chat-list" class="chat-list" role="log" aria-live="polite">
+      ${chatMessages(comments)}
+    </div>
+    ${
+      canComment(me)
+        ? html`<form data-form="comment" data-task="${task.id}" class="chat-form">
+            <textarea
+              name="body"
+              rows="2"
+              required
+              maxlength="2000"
+              placeholder="Escreva um comentário… (Enter envia, Shift+Enter quebra a linha)"
+              aria-label="Novo comentário"
+              data-chat-input
+            ></textarea>
+            <button class="btn primary" type="submit">Enviar</button>
+          </form>`
+        : html`<p class="muted small">
+            Seu perfil é somente leitura: você acompanha a conversa, mas não comenta.
+          </p>`
+    }
+    <p class="form-error" data-error role="alert"></p>
+    <div class="row end">
+      <button class="btn" type="button" data-action="close-dialog">Fechar</button>
+    </div>
+  </section>`;
 }

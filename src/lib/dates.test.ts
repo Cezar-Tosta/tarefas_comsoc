@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { addDays, diffDays, formatBR, isValidISO, monthLabel, todayISO, weekStart } from "./dates";
+import {
+  addDays,
+  diffDays,
+  formatBR,
+  formatDateTimeBR,
+  isValidISO,
+  monthLabel,
+  todayISO,
+  weekStart,
+} from "./dates";
 
 describe("dates", () => {
   it("adds days across month and year boundaries", () => {
@@ -39,6 +48,12 @@ describe("dates", () => {
 
   it("uses the local calendar day for today", () => {
     expect(todayISO(new Date(2026, 8, 19, 23, 59))).toBe("2026-09-19");
+  });
+
+  it("formats a timestamp in local time", () => {
+    const stamp = new Date(2026, 8, 19, 14, 5).toISOString();
+    expect(formatDateTimeBR(stamp)).toBe("19/09/2026 14:05");
+    expect(formatDateTimeBR("lixo")).toBe("—");
   });
 
   it("throws on invalid input to arithmetic", () => {

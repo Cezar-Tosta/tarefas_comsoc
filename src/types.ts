@@ -20,6 +20,22 @@ export interface Subtask {
   position: number;
 }
 
+export interface TaskLink {
+  id: string;
+  task_id: string;
+  title: string;
+  url: string;
+  created_at: string;
+}
+
+export interface Comment {
+  id: string;
+  task_id: string;
+  author_id: string | null;
+  body: string;
+  created_at: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -30,7 +46,9 @@ export interface Task {
   end_date: string | null;
   assignee_id: string | null;
   subtasks: Subtask[];
+  links: TaskLink[];
+  comment_count: number;
 }
 
-export type TaskInput = Omit<Task, "id" | "subtasks">;
+export type TaskInput = Omit<Task, "id" | "subtasks" | "links" | "comment_count">;
 export type SubtaskInput = Omit<Subtask, "id" | "position">;

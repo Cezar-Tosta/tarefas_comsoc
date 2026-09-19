@@ -12,6 +12,8 @@ function task(id: string, over: Partial<Task> = {}): Task {
     start_date: null,
     end_date: null,
     assignee_id: null,
+    links: [],
+    comment_count: 0,
     subtasks: [],
     ...over,
   };
@@ -122,10 +124,12 @@ describe("buildGanttItems", () => {
     expect(items[0]).toMatchObject({ start: "2026-09-25", end: "2026-09-25" });
   });
 
-  it("nests dated subtasks under their task when requested", () => {
+  it("nests subtasks under their task when requested; undated ones inherit the task period", () => {
     const t = task("a", {
       start_date: "2026-09-01",
       end_date: "2026-09-30",
+      links: [],
+      comment_count: 0,
       subtasks: [
         {
           id: "s1",
@@ -151,7 +155,19 @@ describe("buildGanttItems", () => {
     });
     expect(buildGanttItems([t], false, today).items.map((i) => i.id)).toEqual(["a"]);
     const nested = buildGanttItems([t], true, today).items;
-    expect(nested.map((i) => i.id)).toEqual(["a", "s1"]);
-    expect(nested[1]).toMatchObject({ kind: "subtask", parentId: "a", progress: 100, done: true });
+    expect(nested.map((i) => i.id)).toEqual(["a", "s1", "s2"]);
+    expect(nested[1]).toMatchObject({
+      kind: "subtask",
+      parentId: "a",
+      progress: 100,
+      done: true,
+      inherited: false,
+    });
+    expect(nested[2]).toMatchObject({
+      start: "2026-09-01",
+      end: "2026-09-30",
+      progress: 0,
+      inherited: true,
+    });
   });
 });

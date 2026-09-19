@@ -27,6 +27,8 @@ export interface GanttItem {
   overdue: boolean;
   done: boolean;
   parentId: string | null;
+  /** Subtarefa sem datas próprias: desenhada com o período da tarefa. */
+  inherited: boolean;
 }
 
 export interface Range {
@@ -67,16 +69,14 @@ export function buildGanttItems(
       overdue: isOverdue(task, today),
       done: status === "done",
       parentId: null,
+      inherited: false,
     });
     if (!showSubtasks) {
       continue;
     }
     for (const subtask of task.subtasks) {
-      const subStart = subtask.start_date ?? subtask.end_date;
-      const subEnd = subtask.end_date ?? subtask.start_date;
-      if (!subStart || !subEnd) {
-        continue;
-      }
+      const subStart = subtask.start_date ?? subtask.end_date ?? start;
+      const subEnd = subtask.end_date ?? subtask.start_date ?? end;
       items.push({
         id: subtask.id,
         kind: "subtask",
@@ -85,9 +85,10 @@ export function buildGanttItems(
         end: subEnd,
         progress: subtask.done ? 100 : 0,
         status: subtask.done ? "done" : status === "blocked" ? "blocked" : "doing",
-        overdue: !subtask.done && subEnd < today,
+        overdue: !subtask.done && subtask.end_date !== null && subEnd < today,
         done: subtask.done,
         parentId: task.id,
+        inherited: subtask.start_date === null && subtask.end_date === null,
       });
     }
   }

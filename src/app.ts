@@ -4,12 +4,16 @@ import { tasksToCsv } from "./lib/csv";
 import { todayISO } from "./lib/dates";
 import { DEFAULT_FILTERS, filterTasks } from "./lib/filters";
 import type { Zoom } from "./lib/gantt";
+import { normalizeUrl } from "./lib/links";
 import { canManageUsers } from "./lib/permissions";
 import { savePrefs, state, type View } from "./state";
 import type { Priority, Role, Status, TaskInput } from "./types";
 import { html, mount, type Safe } from "./ui/html";
 import {
+  chatMessages,
+  commentsDialog,
   ganttView,
+  linkDialog,
   loginView,
   pendingView,
   setupView,
@@ -218,6 +222,63 @@ function findSubtask(id: string): { task: (typeof state.tasks)[number]; index: n
   return null;
 }
 
+// ---------- comentários (chat) ----------
+
+const CHAT_POLL_MS = 8000;
+let chatTimer: ReturnType<typeof setInterval> | undefined;
+
+function stopChatPolling(): void {
+  clearInterval(chatTimer);
+  chatTimer = undefined;
+  state.chatTaskId = null;
+}
+
+function scrollChatToEnd(): void {
+  const list = document.getElementById("chat-list");
+  if (list) {
+    list.scrollTop = list.scrollHeight;
+  }
+}
+
+const signature = (list: { id: string }[]): string => list.map((c) => c.id).join(",");
+
+/** Busca os comentários da conversa aberta e atualiza a lista só se algo mudou. */
+async function refreshChat(forceScroll = false): Promise<void> {
+  const taskId = state.chatTaskId;
+  if (!taskId) {
+    return;
+  }
+  const fresh = await api.fetchComments(taskId);
+  if (state.chatTaskId !== taskId) {
+    return;
+  }
+  const changed = signature(fresh) !== signature(state.comments);
+  state.comments = fresh;
+  const task = state.tasks.find((t) => t.id === taskId);
+  if (task && task.comment_count !== fresh.length) {
+    task.comment_count = fresh.length;
+    renderContent();
+  }
+  const list = document.getElementById("chat-list");
+  if (!list || !(changed || forceScroll)) {
+    return;
+  }
+  const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+  mount(list, chatMessages(fresh));
+  if (nearBottom || forceScroll) {
+    scrollChatToEnd();
+  }
+}
+
+function startChatPolling(): void {
+  clearInterval(chatTimer);
+  chatTimer = setInterval(() => {
+    refreshChat().catch(() => {
+      // falha de rede momentânea: tenta de novo no próximo ciclo
+    });
+  }, CHAT_POLL_MS);
+}
+
 // ---------- ações ----------
 
 type Handler = (el: HTMLElement) => void | Promise<void>;
@@ -258,6 +319,12 @@ const actions: Record<string, Handler> = {
   },
 
   "scroll-today": scrollGanttToToday,
+
+  "toggle-filters": (el) => {
+    state.filtersOpen = !state.filtersOpen;
+    el.setAttribute("aria-expanded", String(state.filtersOpen));
+    document.getElementById("filters-panel")?.classList.toggle("open", state.filtersOpen);
+  },
 
   "reset-filters": () => {
     state.filters = { ...DEFAULT_FILTERS };
@@ -354,6 +421,42 @@ const actions: Record<string, Handler> = {
       }
     }),
 
+  "open-comments": (el) =>
+    run(async () => {
+      const task = state.tasks.find((t) => t.id === el.dataset["id"]);
+      if (!task) {
+        return;
+      }
+      state.chatTaskId = task.id;
+      state.comments = await api.fetchComments(task.id);
+      openDialog(commentsDialog(task, state.comments));
+      scrollChatToEnd();
+      startChatPolling();
+    }),
+
+  "delete-comment": (el) =>
+    run(async () => {
+      if (!confirm("Apagar este comentário?")) {
+        return;
+      }
+      await api.deleteComment(el.dataset["id"] ?? "");
+      await refreshChat();
+    }),
+
+  "add-link": (el) => {
+    const task = state.tasks.find((t) => t.id === el.dataset["id"]);
+    if (task) {
+      openDialog(linkDialog(task));
+    }
+  },
+
+  "delete-link": (el) =>
+    run(async () => {
+      await api.deleteLink(el.dataset["id"] ?? "");
+      await loadTasks();
+      renderContent();
+    }),
+
   "close-dialog": closeDialog,
 };
 
@@ -448,11 +551,41 @@ async function submitAddSub(form: HTMLFormElement): Promise<void> {
   renderContent();
 }
 
+async function submitComment(form: HTMLFormElement): Promise<void> {
+  const taskId = form.dataset["task"];
+  const body = field(new FormData(form), "body").trim();
+  if (!taskId || !body) {
+    return;
+  }
+  await api.addComment(taskId, body);
+  form.reset();
+  await refreshChat(true);
+}
+
+async function submitLink(form: HTMLFormElement): Promise<void> {
+  const taskId = form.dataset["task"];
+  const data = new FormData(form);
+  const url = normalizeUrl(field(data, "url"));
+  if (!taskId) {
+    return;
+  }
+  if (!url) {
+    formError(form, "Informe um endereço válido (http ou https).");
+    return;
+  }
+  await api.addLink(taskId, url, field(data, "title").trim());
+  closeDialog();
+  await loadTasks();
+  renderContent();
+}
+
 const forms: Record<string, (form: HTMLFormElement) => Promise<void>> = {
   auth: submitAuth,
   task: submitTask,
   subtask: submitSubtask,
   "add-sub": submitAddSub,
+  comment: submitComment,
+  link: submitLink,
 };
 
 // ---------- ligação de eventos ----------
@@ -467,6 +600,23 @@ function setFilter(key: string, value: string | boolean): void {
 }
 
 export function bindEvents(): void {
+  // Enter envia o comentário; Shift+Enter quebra a linha.
+  document.addEventListener("keydown", (event) => {
+    const el = event.target;
+    if (
+      el instanceof HTMLTextAreaElement &&
+      el.hasAttribute("data-chat-input") &&
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.isComposing
+    ) {
+      event.preventDefault();
+      el.form?.requestSubmit();
+    }
+  });
+
+  byId("dialog").addEventListener("close", stopChatPolling);
+
   document.addEventListener("click", (event) => {
     const el = (event.target as Element).closest<HTMLElement>("[data-action]");
     // checkboxes e selects são tratados no evento "change"

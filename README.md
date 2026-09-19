@@ -10,6 +10,8 @@ Front-end estático (Vite + TypeScript, sem framework) e **Supabase** como backe
 - **Subtarefas**: checkbox; as concluídas ficam riscadas e agrupadas em um bloco recolhido ("Concluídas (n)").
 - **Gantt**: escala por dia/semana/mês, linha de "hoje", barras com progresso, subtarefas opcionais, atrasadas em vermelho.
 - **Filtros** (valem para lista, Gantt e exportação): busca, status (inclui "atrasadas"), responsável, prioridade, período, ocultar concluídas. Ficam salvos no navegador.
+- **Comentários** em cada tarefa, em formato de chat (atualiza sozinho a cada 8 s enquanto aberto). Administradores e usuários comentam; visualizadores só leem. Apaga quem escreveu ou um administrador. Links coladas no texto viram clicáveis.
+- **Links** anexados à tarefa (título opcional; só http/https). Quem edita a tarefa adiciona e remove.
 - **Exportar CSV** (abre direto no Excel).
 - **Perfis**:
 
@@ -26,7 +28,7 @@ Front-end estático (Vite + TypeScript, sem framework) e **Supabase** como backe
 ## Configuração (uma vez)
 
 1. Crie um projeto em <https://supabase.com>.
-2. No **SQL Editor**, cole e execute `supabase/schema.sql`.
+2. No **SQL Editor**, cole e execute o **conteúdo** de `supabase/schema.sql` e, em seguida, de `supabase/002_comments_links.sql` (comentários e links). Rode cada um uma vez, nessa ordem.
 3. Em **Authentication → Providers → Email**, decida se exige confirmação de e-mail
    (desligar simplifica o primeiro acesso; ligar é mais seguro). Em **Authentication → URL Configuration**,
    coloque a URL do seu Pages (`https://<usuario>.github.io/<repo>/`) em _Site URL_.
@@ -58,6 +60,6 @@ Estrutura: `src/lib/` (lógica pura testada: progresso, filtros, Gantt, permiss�
 
 ## Ideias para próximas versões
 
-Comentários e histórico de alterações por tarefa · dependências entre tarefas (setas no Gantt) ·
-visão Kanban e calendário · arrastar barras do Gantt para mudar datas · anexos/links ·
+Histórico de alterações por tarefa · comentários em tempo real (Realtime) · dependências entre tarefas (setas no Gantt) ·
+visão Kanban e calendário · arrastar barras do Gantt para mudar datas · anexos de arquivos ·
 tarefas recorrentes e modelos · avisos de prazo por e-mail · importação de CSV.

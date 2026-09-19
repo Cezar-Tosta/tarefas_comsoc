@@ -1,5 +1,14 @@
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
-import type { Profile, Role, Subtask, SubtaskInput, Task, TaskInput } from "./types";
+import type {
+  Comment,
+  Profile,
+  Role,
+  Subtask,
+  SubtaskInput,
+  Task,
+  TaskInput,
+  TaskLink,
+} from "./types";
 
 const url = import.meta.env["VITE_SUPABASE_URL"] as string | undefined;
 const anonKey = import.meta.env["VITE_SUPABASE_ANON_KEY"] as string | undefined;
@@ -77,9 +86,22 @@ export async function fetchProfiles(): Promise<Profile[]> {
 }
 
 export async function fetchTasks(): Promise<Task[]> {
-  const { data, error } = await db().from("tasks").select("*, subtasks(*)");
+  const { data, error } = await db()
+    .from("tasks")
+    .select("*, subtasks(*), task_links(*), comments(count)");
   check(error);
-  const tasks = (data ?? []) as Task[];
+  const rows = (data ?? []) as (Omit<Task, "links" | "comment_count"> & {
+    task_links: TaskLink[];
+    comments: { count: number }[];
+  })[];
+  const tasks: Task[] = [];
+  for (const { task_links, comments, ...rest } of rows) {
+    tasks.push({
+      ...rest,
+      links: task_links.toSorted((a, b) => a.created_at.localeCompare(b.created_at)),
+      comment_count: comments[0]?.count ?? 0,
+    });
+  }
   for (const task of tasks) {
     task.subtasks.sort((a, b) => a.position - b.position);
   }
@@ -133,5 +155,37 @@ export async function deleteSubtask(id: string): Promise<void> {
 
 export async function setRole(id: string, role: Role): Promise<void> {
   const { data, error } = await db().from("profiles").update({ role }).eq("id", id).select("id");
+  checkAffected(data, error);
+}
+
+// ---------- comentários e links ----------
+
+export async function fetchComments(taskId: string): Promise<Comment[]> {
+  const { data, error } = await db()
+    .from("comments")
+    .select("*")
+    .eq("task_id", taskId)
+    .order("created_at", { ascending: true });
+  check(error);
+  return (data ?? []) as Comment[];
+}
+
+export async function addComment(taskId: string, body: string): Promise<void> {
+  const { error } = await db().from("comments").insert({ task_id: taskId, body });
+  check(error);
+}
+
+export async function deleteComment(id: string): Promise<void> {
+  const { data, error } = await db().from("comments").delete().eq("id", id).select("id");
+  checkAffected(data, error);
+}
+
+export async function addLink(taskId: string, href: string, title: string): Promise<void> {
+  const { error } = await db().from("task_links").insert({ task_id: taskId, url: href, title });
+  check(error);
+}
+
+export async function deleteLink(id: string): Promise<void> {
+  const { data, error } = await db().from("task_links").delete().eq("id", id).select("id");
   checkAffected(data, error);
 }

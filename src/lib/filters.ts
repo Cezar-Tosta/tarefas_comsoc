@@ -41,6 +41,20 @@ function matchesText(task: Task, needle: string): boolean {
   return false;
 }
 
+/** A pessoa está envolvida se é responsável pela tarefa ou por qualquer subtarefa dela. */
+function involves(task: Task, personId: string): boolean {
+  if (task.assignee_id === personId) {
+    return true;
+  }
+  return task.subtasks.some((subtask) => subtask.assignee_id === personId);
+}
+
+function hasNoAssignee(task: Task): boolean {
+  return (
+    task.assignee_id === null && task.subtasks.every((subtask) => subtask.assignee_id === null)
+  );
+}
+
 function matchesPeriod(task: Task, from: string, to: string): boolean {
   if (!from && !to) {
     return true;
@@ -78,10 +92,10 @@ export function filterTasks(tasks: Task[], filters: Filters, today: string): Tas
       continue;
     }
     if (filters.assignee === "none") {
-      if (task.assignee_id !== null) {
+      if (!hasNoAssignee(task)) {
         continue;
       }
-    } else if (filters.assignee !== "all" && task.assignee_id !== filters.assignee) {
+    } else if (filters.assignee !== "all" && !involves(task, filters.assignee)) {
       continue;
     }
     if (!matchesPeriod(task, filters.from, filters.to)) {

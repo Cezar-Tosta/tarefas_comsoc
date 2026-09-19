@@ -31,6 +31,8 @@ function task(over: Partial<Task> = {}): Task {
     start_date: null,
     end_date: null,
     assignee_id: null,
+    links: [],
+    comment_count: 0,
     subtasks: [],
     ...over,
   };

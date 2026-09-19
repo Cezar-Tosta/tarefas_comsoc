@@ -31,6 +31,23 @@ export function canManageSubtasks(me: Profile, task: Task): boolean {
   return canEditTask(me, task);
 }
 
+/** Comentários: administradores e usuários participam; visualizadores só leem. */
+export function canComment(me: Profile): boolean {
+  return me.role === "admin" || me.role === "user";
+}
+
+export function canDeleteComment(me: Profile, comment: { author_id: string | null }): boolean {
+  if (me.role === "admin") {
+    return true;
+  }
+  return me.role === "user" && comment.author_id === me.id;
+}
+
+/** Links da tarefa: quem pode editar a tarefa. */
+export function canManageLinks(me: Profile, task: Task): boolean {
+  return canEditTask(me, task);
+}
+
 /** Marcar/desmarcar (e editar) uma subtarefa: dono da tarefa ou responsável pela subtarefa. */
 export function canToggleSubtask(me: Profile, task: Task, subtask: Subtask): boolean {
   if (canEditTask(me, task)) {

@@ -1,6 +1,6 @@
 import { DEFAULT_FILTERS, type Filters } from "./lib/filters";
 import type { Zoom } from "./lib/gantt";
-import type { Profile, Task } from "./types";
+import type { Comment, Profile, Task } from "./types";
 
 export type View = "tasks" | "gantt" | "users";
 export type Screen = "loading" | "setup" | "login" | "pending" | "main";
@@ -16,6 +16,11 @@ export interface State {
   filters: Filters;
   zoom: Zoom;
   showSubtasks: boolean;
+  /** Painel de filtros aberto (só tem efeito no celular). */
+  filtersOpen: boolean;
+  /** Conversa aberta no diálogo de comentários. */
+  chatTaskId: string | null;
+  comments: Comment[];
   /** Tarefas cujo grupo "Concluídas" está aberto. */
   openDone: Set<string>;
 }
@@ -31,6 +36,9 @@ export const state: State = {
   filters: { ...DEFAULT_FILTERS },
   zoom: "week",
   showSubtasks: true,
+  filtersOpen: false,
+  chatTaskId: null,
+  comments: [],
   openDone: new Set(),
 };
 

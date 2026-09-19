@@ -12,6 +12,8 @@ function task(id: string, over: Partial<Task> = {}): Task {
     start_date: null,
     end_date: null,
     assignee_id: null,
+    links: [],
+    comment_count: 0,
     subtasks: [],
     ...over,
   };
@@ -36,6 +38,8 @@ const tasks = [
   }),
   task("compras", { description: "Comprar cabos", status: "todo" }),
   task("infra", {
+    links: [],
+    comment_count: 0,
     subtasks: [
       {
         id: "s",
@@ -78,6 +82,39 @@ describe("filterTasks", () => {
     expect(ids(filterTasks(tasks, f({ assignee: "u2" }), today))).toEqual(["site"]);
     expect(ids(filterTasks(tasks, f({ assignee: "none" }), today))).toEqual(["compras", "infra"]);
     expect(ids(filterTasks(tasks, f({ priority: "high" }), today))).toEqual(["relatório"]);
+  });
+
+  it("matches tasks where the person is assigned only to a subtask", () => {
+    const shared = task("compartilhada", {
+      assignee_id: "u1",
+      links: [],
+      comment_count: 0,
+      subtasks: [
+        {
+          id: "s9",
+          task_id: "compartilhada",
+          title: "Parte da Bia",
+          done: false,
+          start_date: null,
+          end_date: null,
+          assignee_id: "u2",
+          position: 0,
+        },
+      ],
+    });
+    const list = [...tasks, shared];
+    expect(ids(filterTasks(list, f({ assignee: "u2" }), today))).toEqual(["site", "compartilhada"]);
+    expect(ids(filterTasks(list, f({ assignee: "u1" }), today))).toEqual([
+      "relatório",
+      "compartilhada",
+    ]);
+    // "sem responsável" exclui tarefas em que só uma subtarefa tem dono
+    const onlySub = task("so-sub", {
+      links: [],
+      comment_count: 0,
+      subtasks: [{ ...shared.subtasks[0]!, task_id: "so-sub" }],
+    });
+    expect(ids(filterTasks([onlySub], f({ assignee: "none" }), today))).toEqual([]);
   });
 
   it("filters by overlapping period and excludes undated tasks when a period is set", () => {

@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { Profile, Subtask, Task } from "../types";
 import {
   canAssign,
+  canComment,
   canCreateTask,
+  canDeleteComment,
   canDeleteTask,
   canEditTask,
+  canManageLinks,
   canManageSubtasks,
   canManageUsers,
   canToggleSubtask,
@@ -36,6 +39,8 @@ const t = (assignee: string | null, subtasks: Subtask[] = []): Task => ({
   start_date: null,
   end_date: null,
   assignee_id: assignee,
+  links: [],
+  comment_count: 0,
   subtasks,
 });
 
@@ -75,5 +80,27 @@ describe("permissions", () => {
     expect(canToggleSubtask(other, task, s("u"))).toBe(true);
     expect(canToggleSubtask(viewer, task, s("v"))).toBe(false);
     expect(canToggleSubtask(admin, task, s(null))).toBe(true);
+  });
+
+  it("admins and users comment; viewers and pending only read", () => {
+    expect(canComment(admin)).toBe(true);
+    expect(canComment(user)).toBe(true);
+    expect(canComment(viewer)).toBe(false);
+    expect(canComment(pending)).toBe(false);
+  });
+
+  it("a comment can be removed by its author or an admin", () => {
+    expect(canDeleteComment(user, { author_id: "u" })).toBe(true);
+    expect(canDeleteComment(user, { author_id: "o" })).toBe(false);
+    expect(canDeleteComment(admin, { author_id: "o" })).toBe(true);
+    expect(canDeleteComment(viewer, { author_id: "v" })).toBe(false);
+    expect(canDeleteComment(user, { author_id: null })).toBe(false);
+  });
+
+  it("links are managed by whoever can edit the task", () => {
+    expect(canManageLinks(user, t("u"))).toBe(true);
+    expect(canManageLinks(user, t("o"))).toBe(false);
+    expect(canManageLinks(admin, t("o"))).toBe(true);
+    expect(canManageLinks(viewer, t("v"))).toBe(false);
   });
 });

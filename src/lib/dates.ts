@@ -46,6 +46,17 @@ export function formatBR(iso: string | null): string {
   return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 }
 
+const pad = (n: number): string => String(n).padStart(2, "0");
+
+/** Data e hora locais de um timestamp ISO (ex.: do banco): "19/09/2026 14:05". */
+export function formatDateTimeBR(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export function monthShort(iso: string): string {
   return MONTHS[Number(iso.slice(5, 7)) - 1] ?? "";
 }

@@ -29,6 +29,8 @@ describe("tasksToCsv", () => {
       start_date: "2026-09-01",
       end_date: "2026-09-10",
       assignee_id: "u1",
+      links: [],
+      comment_count: 0,
       subtasks: [
         {
           id: "s1",

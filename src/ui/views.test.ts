@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { state } from "../state";
 import type { Profile, Task } from "../types";
-import { ganttView, tasksView, toolbarView, usersView } from "./views";
+import {
+  chatMessages,
+  commentsDialog,
+  ganttView,
+  linkDialog,
+  tasksView,
+  toolbarView,
+  usersView,
+} from "./views";
 
 const admin: Profile = { id: "a", email: "a@x", name: "Ada", role: "admin" };
 const ana: Profile = { id: "u1", email: "ana@x", name: "Ana", role: "user" };
@@ -19,6 +27,8 @@ function makeTasks(): Task[] {
       start_date: "2026-09-01",
       end_date: "2026-09-30",
       assignee_id: "u1",
+      links: [],
+      comment_count: 0,
       subtasks: [
         {
           id: "s1",
@@ -51,6 +61,8 @@ function makeTasks(): Task[] {
       start_date: null,
       end_date: null,
       assignee_id: "u2",
+      links: [],
+      comment_count: 0,
       subtasks: [],
     },
   ];
@@ -104,6 +116,19 @@ describe("tasksView", () => {
     expect(out).not.toContain('data-form="add-sub" data-task="t2"');
   });
 
+  it("has a collapsible filters panel with the active-filter count", () => {
+    state.filtersOpen = false;
+    state.filters = { ...state.filters, status: "done", hideDone: true };
+    const out = toolbarView().value;
+    expect(out).toContain('data-action="toggle-filters"');
+    expect(out).toMatch(/id="filters-panel"\s+class="filters-panel\s*"/);
+    expect(out).toMatch(/count-pill">2</);
+    state.filtersOpen = true;
+    expect(toolbarView().value).toMatch(/class="filters-panel\s+open"/);
+    state.filtersOpen = false;
+    state.filters = { ...state.filters, status: "all", hideDone: false };
+  });
+
   it("is read-only for viewers", () => {
     as(vera);
     const out = tasksView().value;
@@ -122,6 +147,27 @@ describe("ganttView", () => {
     expect(out).toContain("Sem datas (fora do Gantt)");
   });
 
+  it("draws undated subtasks with the task period, marked as inherited", () => {
+    const task = state.tasks[0];
+    if (!task) {
+      throw new Error("fixture vazia");
+    }
+    task.subtasks.push({
+      id: "s9",
+      task_id: "t1",
+      title: "Sem data própria",
+      done: false,
+      start_date: null,
+      end_date: null,
+      assignee_id: null,
+      position: 9,
+    });
+    const out = ganttView().value;
+    expect(out).toContain("Sem data própria");
+    expect(out).toContain("bar-inherited");
+    expect(out).toContain("usa as da tarefa");
+  });
+
   it("hides subtask rows when disabled", () => {
     state.showSubtasks = false;
     const out = ganttView().value;
@@ -135,5 +181,125 @@ describe("usersView", () => {
     const out = usersView().value;
     expect(out).toMatch(/data-id="a"[^>]*disabled/);
     expect(out).not.toMatch(/data-id="u1"[^>]*disabled/);
+  });
+});
+
+function withLinks(): void {
+  const task = state.tasks[0];
+  if (!task) {
+    throw new Error("fixture vazia");
+  }
+  task.comment_count = 3;
+  task.links = [
+    {
+      id: "l1",
+      task_id: "t1",
+      title: "Planilha",
+      url: "https://exemplo.com/p",
+      created_at: "2026-09-01T10:00:00Z",
+    },
+    {
+      id: "l2",
+      task_id: "t1",
+      title: "Perigoso",
+      url: "javascript:alert(1)",
+      created_at: "2026-09-01T11:00:00Z",
+    },
+  ];
+}
+
+describe("links and comments", () => {
+  it("shows the comment count and safe links; unsafe URLs are never anchors", () => {
+    withLinks();
+    const out = tasksView().value;
+    expect(out).toContain('data-action="open-comments" data-id="t1"');
+    expect(out).toMatch(/count-pill">3</);
+    expect(out).toContain('href="https://exemplo.com/p"');
+    expect(out).toContain('rel="noopener noreferrer"');
+    expect(out).not.toContain('href="javascript:');
+  });
+
+  it("lets only whoever edits the task add or remove links", () => {
+    withLinks();
+    expect(tasksView().value).toContain('data-action="add-link" data-id="t1"');
+    as(ana); // dona de t1
+    withLinks();
+    expect(tasksView().value).toContain('data-action="add-link" data-id="t1"');
+    expect(tasksView().value).not.toContain('data-action="add-link" data-id="t2"');
+    as(vera);
+    withLinks();
+    const out = tasksView().value;
+    expect(out).not.toContain("add-link");
+    expect(out).not.toContain("delete-link");
+    expect(out).toContain('href="https://exemplo.com/p"');
+  });
+
+  it("renders the chat with escaped, linkified messages and a composer for admins and users", () => {
+    const task = state.tasks[0]!;
+    const comments = [
+      {
+        id: "c1",
+        task_id: "t1",
+        author_id: "u1",
+        body: "veja https://exemplo.com <b>x</b>",
+        created_at: "2026-09-19T17:05:00Z",
+      },
+      { id: "c2", task_id: "t1", author_id: "a", body: "ok", created_at: "2026-09-19T17:06:00Z" },
+    ];
+    const out = commentsDialog(task, comments).value;
+    expect(out).toContain("Ana");
+    expect(out).toMatch(/<a href="https:\/\/exemplo.com"/);
+    expect(out).toContain("&lt;b&gt;x&lt;/b&gt;");
+    expect(out).toContain('data-form="comment"');
+    expect(out).toContain("msg mine"); // admin é o usuário atual
+    expect(out).toMatch(/data-action="delete-comment"\s+data-id="c2"/);
+  });
+
+  it("gives viewers a read-only chat", () => {
+    as(vera);
+    const task = state.tasks[0]!;
+    const out = commentsDialog(task, []).value;
+    expect(out).not.toContain('data-form="comment"');
+    expect(out).toContain("somente leitura");
+    expect(out).toContain("Nenhum comentário ainda");
+  });
+
+  it("hides delete on other people's comments for a regular user", () => {
+    as(ana);
+    const list = chatMessages([
+      { id: "c1", task_id: "t1", author_id: "u1", body: "meu", created_at: "2026-09-19T17:05:00Z" },
+      { id: "c2", task_id: "t1", author_id: "a", body: "dele", created_at: "2026-09-19T17:06:00Z" },
+    ]).value;
+    expect(list).toMatch(/data-action="delete-comment"\s+data-id="c1"/);
+    expect(list).not.toMatch(/data-action="delete-comment"\s+data-id="c2"/);
+  });
+
+  it("builds the link dialog for a task", () => {
+    const task = state.tasks[0]!;
+    expect(linkDialog(task).value).toContain('data-form="link" data-task="t1"');
+  });
+});
+
+describe("assignee filter includes subtask assignees", () => {
+  it("shows a task in the person's filter when only a subtask is theirs", () => {
+    const task = state.tasks[1]; // t2 é da Bia
+    if (!task) {
+      throw new Error("fixture vazia");
+    }
+    task.subtasks.push({
+      id: "sx",
+      task_id: "t2",
+      title: "Parte da Ana",
+      done: false,
+      start_date: null,
+      end_date: null,
+      assignee_id: "u1",
+      position: 0,
+    });
+    state.filters = { ...state.filters, assignee: "u1" };
+    const out = tasksView().value;
+    expect(out).toContain("Sem datas"); // t2 aparece
+    expect(out).toContain("Parte da Ana");
+    state.filters = { ...state.filters, assignee: "all" };
   });
 });
