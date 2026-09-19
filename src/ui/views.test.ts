@@ -488,6 +488,16 @@ describe("subtask starting after another", () => {
     expect(ganttView().value).toContain("06/09/2026 – 20/09/2026");
   });
 
+  it("hides dates and the start link from regular users, keeping the title", () => {
+    as(ana);
+    link();
+    const out = tasksView().value;
+    expect(out).toContain("Escrever");
+    expect(out).not.toContain("↳ após");
+    expect(out).not.toContain("06/09/2026");
+    expect(out).not.toMatch(/class="chip[^"]*"\s*>\s*\d\d\/\d\d\/\d{4}/);
+  });
+
   it("locks the start date field while linked", () => {
     link();
     const task = state.tasks[0];

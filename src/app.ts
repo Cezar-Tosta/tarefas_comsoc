@@ -476,6 +476,10 @@ const actions: Record<string, Handler> = {
         return;
       }
       const done = el.checked;
+      if (done && !confirm(`Marcar a subtarefa "${subtask.title}" como concluída?`)) {
+        el.checked = false;
+        return;
+      }
       subtask.done = done; // otimista
       renderContent();
       try {
@@ -571,7 +575,7 @@ async function submitAuth(form: HTMLFormElement): Promise<void> {
     if (!loggedIn) {
       state.authMode = "signin";
       state.authMessage =
-        "Conta criada! Se o e-mail exigir confirmação, confirme-o e depois entre. Um administrador precisará liberar seu acesso.";
+        "Conta criada! Agora é só entrar e aguardar: um administrador precisará liberar seu acesso.";
       render();
     }
     return;
@@ -604,6 +608,11 @@ async function submitTask(form: HTMLFormElement): Promise<void> {
     formError(form, "Informe um título.");
     return;
   }
+  if (input.status === "done" && existing?.status !== "done") {
+    if (!confirm(`Marcar a tarefa "${input.title}" como concluída?`)) {
+      return;
+    }
+  }
   await api.saveTask(id, input);
   closeDialog();
   await loadTasks();
@@ -631,7 +640,15 @@ async function submitSubtask(form: HTMLFormElement): Promise<void> {
     formError(form, "Informe um título.");
     return;
   }
-  const before = found?.task.subtasks[found.index]?.start_after_id ?? null;
+  const current = found?.task.subtasks[found.index];
+  const before = current?.start_after_id ?? null;
+  if (
+    data.has("done") &&
+    !current?.done &&
+    !confirm(`Marcar a subtarefa "${title}" como concluída?`)
+  ) {
+    return;
+  }
   await api.updateSubtask(id, {
     title,
     start_date: start,

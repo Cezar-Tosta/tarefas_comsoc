@@ -362,6 +362,8 @@ function subtaskRow(me: Profile, task: Task, subtask: Subtask): Safe {
   const canRemove = canManageSubtasks(me, task);
   const dates = resolveSubtaskDates(subtask, task.subtasks);
   const late = !subtask.done && dates.end !== null && dates.end < todayISO();
+  // Usuários comuns veem só o essencial: sem datas nem vínculo de início.
+  const compact = me.role === "user";
   const predecessor = subtask.start_after_id
     ? task.subtasks.find((s) => s.id === subtask.start_after_id)
     : undefined;
@@ -379,12 +381,14 @@ function subtaskRow(me: Profile, task: Task, subtask: Subtask): Safe {
     <span class="sub-meta">
       ${subtask.assignee_id && html`<span class="chip">${personName(subtask.assignee_id)}</span>`}
       ${
+        !compact &&
         predecessor &&
         html`<span class="chip" title="Começa no dia seguinte ao término de “${predecessor.title}”"
           >↳ após ${predecessor.title}</span
         >`
       }
       ${
+        !compact &&
         (dates.start || dates.end) &&
         html`<span class="chip ${late && "late"}">${period(dates.start, dates.end)}</span>`
       }
