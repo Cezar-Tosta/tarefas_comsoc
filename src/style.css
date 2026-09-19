@@ -374,6 +374,18 @@ code {
 
 /* ---------- resumo ---------- */
 
+#summary:empty {
+  display: none;
+}
+
+.section-title {
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
 .stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));

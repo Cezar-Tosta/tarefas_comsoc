@@ -6,6 +6,7 @@ import {
   commentsDialog,
   ganttView,
   linkDialog,
+  summaryView,
   tasksView,
   toolbarView,
   usersView,
@@ -334,5 +335,30 @@ describe("hide done", () => {
     state.filters = { ...state.filters, hideDone: false };
     expect(hidden).not.toContain("Coletar dados");
     expect(hidden).toContain("Escrever");
+  });
+});
+
+describe("summary metrics per profile", () => {
+  const TODAY = "2026-09-19";
+
+  it("admin sees the general overview with every task", () => {
+    const out = summaryView(TODAY).value;
+    expect(out).toContain("Visão geral");
+    expect(out).toContain("Progresso geral");
+    expect(out).toMatch(/stat-value">2</); // t1 e t2
+  });
+
+  it("a user sees only their own metrics", () => {
+    as(ana); // t1 é dela (dona); t2 é da Bia, sem subtarefa da Ana
+    const out = summaryView(TODAY).value;
+    expect(out).toContain("Minhas tarefas");
+    expect(out).toContain("Progresso das minhas tarefas");
+    expect(out).toMatch(/stat-value">1</);
+    expect(out).not.toMatch(/stat-value">2</);
+  });
+
+  it("a viewer sees no metrics at all", () => {
+    as(vera);
+    expect(summaryView(TODAY).value).toBe("");
   });
 });

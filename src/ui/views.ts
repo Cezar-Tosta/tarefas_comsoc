@@ -2,6 +2,7 @@ import { PRIORITIES, PRIORITY_LABEL, ROLE_LABEL, ROLES, STATUS_LABEL, STATUSES }
 import { formatBR, formatDateTimeBR, todayISO } from "../lib/dates";
 import { hostLabel, isHttpUrl } from "../lib/links";
 import { filterTasks } from "../lib/filters";
+import { computeMetrics, metricsScope } from "../lib/metrics";
 import {
   barGeometry,
   buildGanttItems,
@@ -22,13 +23,7 @@ import {
   canManageUsers,
   canToggleSubtask,
 } from "../lib/permissions";
-import {
-  effectiveStatus,
-  isOverdue,
-  overallProgress,
-  splitSubtasks,
-  taskProgress,
-} from "../lib/progress";
+import { effectiveStatus, isOverdue, splitSubtasks, taskProgress } from "../lib/progress";
 import { currentUser, state, type View } from "../state";
 import type { Comment, Profile, Subtask, Task, TaskLink } from "../types";
 import { html, raw, type Safe } from "./html";
@@ -187,32 +182,24 @@ function cells(list: { label: string; left: number; width: number }[]): Safe {
 }
 
 export function summaryView(today: string): Safe {
-  const tasks = state.tasks;
-  let doing = 0;
-  let done = 0;
-  let late = 0;
-  for (const task of tasks) {
-    const status = effectiveStatus(task);
-    if (status === "doing") {
-      doing++;
-    }
-    if (status === "done") {
-      done++;
-    }
-    if (isOverdue(task, today)) {
-      late++;
-    }
+  const me = currentUser();
+  const scope = metricsScope(me, state.tasks);
+  if (scope === null) {
+    return html``;
   }
-  const overall = overallProgress(tasks);
-  return html`<div class="stats">
-    ${card("Tarefas", tasks.length)} ${card("Em andamento", doing)}
-    ${card("Concluídas", done, "ok")} ${card("Atrasadas", late, late > 0 ? "bad" : "")}
-    <div class="stat wide">
-      <span class="stat-value">${overall}%</span>
-      <span class="stat-label">Progresso geral</span>
-      ${progressBar(overall)}
-    </div>
-  </div>`;
+  const m = computeMetrics(scope, today);
+  const title = me.role === "admin" ? "Visão geral" : "Minhas tarefas";
+  return html`<h2 class="section-title">${title}</h2>
+    <div class="stats">
+      ${card(me.role === "admin" ? "Tarefas" : "Minhas tarefas", m.total)}
+      ${card("Em andamento", m.doing)} ${card("Concluídas", m.done, "ok")}
+      ${card("Atrasadas", m.late, m.late > 0 ? "bad" : "")}
+      <div class="stat wide">
+        <span class="stat-value">${m.overall}%</span>
+        <span class="stat-label">Progresso ${me.role === "admin" ? "geral" : "das minhas tarefas"}</span>
+        ${progressBar(m.overall)}
+      </div>
+    </div>`;
 }
 
 export function toolbarView(): Safe {
