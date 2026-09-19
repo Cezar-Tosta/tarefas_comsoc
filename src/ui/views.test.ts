@@ -6,6 +6,8 @@ import {
   commentsDialog,
   ganttView,
   linkDialog,
+  loginView,
+  pendingView,
   reportsView,
   shellView,
   summaryView,
@@ -414,5 +416,25 @@ describe("a user with nothing assigned", () => {
     const report = reportsView().value;
     expect(report).toContain("Você ainda não tem tarefas atribuídas");
     expect(report).toContain("Nada atribuído");
+  });
+});
+
+describe("logo", () => {
+  it("replaces the text title on the login screen and keeps an accessible name", () => {
+    const out = loginView().value;
+    expect(out).toMatch(/<img[^>]*alt="Tarefas COMSOC"/);
+    expect(out).not.toContain("<h1>Tarefas COMSOC</h1>");
+  });
+
+  it("shows the logo in the top bar instead of the text title", () => {
+    const out = shellView().value;
+    expect(out).toMatch(/<h1 class="brand">\s*<img[^>]*alt="Tarefas COMSOC"/);
+    expect(out).not.toContain("<h1>Tarefas COMSOC</h1>");
+  });
+
+  it("shows the logo on the pending approval screen", () => {
+    as(vera);
+    state.me = { ...vera, role: "pending" };
+    expect(pendingView().value).toContain("brand-hero");
   });
 });

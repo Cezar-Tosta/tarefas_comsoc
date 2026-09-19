@@ -1,42 +1,47 @@
 :root {
   color-scheme: light dark;
-  --bg: #f4f5f7;
-  --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --text: #1c2330;
-  --muted: #5d6675;
-  --line: #dde1e8;
-  --accent: #2563eb;
+  /* Paleta inspirada na camuflagem do Exército Brasileiro: verde-oliva, cáqui e marrom-terra, em tons contidos. */
+  --bg: #ebede4;
+  --surface: #f7f7f2;
+  --surface-2: #ecede3;
+  --text: #1f2419;
+  --muted: #59604f;
+  --line: #d2d5c6;
+  --accent: #4f6132;
   --accent-text: #ffffff;
-  --danger: #c62828;
-  --st-todo: #7b8494;
-  --st-doing: #2563eb;
-  --st-blocked: #c77800;
-  --st-done: #2e7d32;
-  --late: #c62828;
-  --today: #e11d48;
-  --shadow: 0 1px 2px rgb(16 24 40 / 8%);
+  --danger: #a33a2a;
+  --st-todo: #858a76;
+  --st-doing: #46697a;
+  --st-blocked: #9a6a14;
+  --st-done: #3d6a38;
+  --late: #a33a2a;
+  --today: #b8402f;
+  --topbar: #2f3a25;
+  --topbar-text: #e6e8dc;
+  --shadow: 0 1px 2px rgb(31 36 25 / 8%);
   --label-w: 260px;
   --radius: 10px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #12151b;
-    --surface: #1b2029;
-    --surface-2: #232937;
-    --text: #e8ebf1;
-    --muted: #a0a8b8;
-    --line: #313849;
-    --accent: #5b8def;
-    --accent-text: #0b1220;
-    --danger: #ff6b6b;
-    --st-todo: #8b94a6;
-    --st-doing: #5b8def;
-    --st-blocked: #e0a030;
-    --st-done: #55b45a;
-    --late: #ff6b6b;
-    --today: #ff4d6d;
+    --bg: #13160f;
+    --surface: #1b1f15;
+    --surface-2: #242a1b;
+    --text: #e6e8dc;
+    --muted: #a4aa93;
+    --line: #343b28;
+    --accent: #94ac6c;
+    --accent-text: #11150b;
+    --danger: #e0806e;
+    --st-todo: #8e937f;
+    --st-doing: #6f9bab;
+    --st-blocked: #d6a24a;
+    --st-done: #7fb573;
+    --late: #e0806e;
+    --today: #e0705d;
+    --topbar: #1c2214;
+    --topbar-text: #e6e8dc;
     --shadow: none;
   }
 }
@@ -241,6 +246,10 @@ code {
   display: grid;
   place-items: center;
   padding: 24px 16px;
+  background-color: var(--topbar);
+  background-image: url("./assets/camo.png");
+  background-size: 192px 192px;
+  image-rendering: pixelated;
 }
 
 .panel {
@@ -256,6 +265,35 @@ code {
 
 .panel h1 {
   font-size: 22px;
+  text-align: center;
+}
+
+.brand-hero {
+  display: block;
+  margin: 0 auto;
+  line-height: 0;
+}
+
+.brand-hero img,
+img.brand-hero {
+  display: block;
+  margin: 0 auto;
+  width: min(168px, 60vw);
+  height: auto;
+}
+
+img.brand-hero {
+  width: min(120px, 45vw);
+}
+
+.brand {
+  line-height: 0;
+}
+
+.brand img {
+  display: block;
+  width: 44px;
+  height: 44px;
 }
 
 .notice {
@@ -281,8 +319,12 @@ code {
   gap: 16px;
   flex-wrap: wrap;
   padding: 10px 24px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  background-color: var(--topbar);
+  background-image: url("./assets/camo.png");
+  background-size: 192px 192px;
+  image-rendering: pixelated;
+  color: var(--topbar-text);
+  border-bottom: 1px solid rgb(0 0 0 / 35%);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -313,8 +355,41 @@ code {
 }
 
 .tab[aria-current="page"] {
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
-  color: var(--accent);
+  background: rgb(255 255 255 / 16%);
+  color: #ffffff;
+}
+
+.topbar .tab {
+  color: rgb(230 232 220 / 72%);
+}
+
+.topbar .tab:hover {
+  background: rgb(255 255 255 / 10%);
+  color: #ffffff;
+}
+
+.topbar .tab[aria-current="page"] {
+  background: rgb(255 255 255 / 16%);
+  color: #ffffff;
+}
+
+.topbar .who .badge {
+  background: rgb(255 255 255 / 14%);
+  color: var(--topbar-text);
+}
+
+.topbar .btn {
+  background: transparent;
+  color: inherit;
+  border-color: rgb(255 255 255 / 28%);
+}
+
+.topbar .btn:hover {
+  background: rgb(255 255 255 / 10%);
+}
+
+.brand img {
+  filter: drop-shadow(0 0 1px rgb(255 255 255 / 30%));
 }
 
 .who {
@@ -581,7 +656,7 @@ code {
 
 .progress-fill {
   height: 100%;
-  background: var(--st-doing);
+  background: var(--accent);
   border-radius: inherit;
   transition: width 0.25s;
 }
@@ -1039,7 +1114,7 @@ dialog {
 }
 
 dialog::backdrop {
-  background: rgb(10 14 22 / 55%);
+  background: rgb(14 18 10 / 60%);
 }
 
 #toasts {
@@ -1117,7 +1192,7 @@ dialog::backdrop {
   .tabs {
     order: 3;
     flex: 1 0 100%;
-    background: var(--surface-2);
+    background: rgb(0 0 0 / 28%);
     border-radius: 10px;
     padding: 3px;
   }
@@ -1128,9 +1203,9 @@ dialog::backdrop {
     text-align: center;
   }
 
-  .tab[aria-current="page"] {
-    background: var(--surface);
-    box-shadow: var(--shadow);
+  .topbar .tab[aria-current="page"] {
+    background: rgb(255 255 255 / 18%);
+    box-shadow: none;
   }
 
   .page {

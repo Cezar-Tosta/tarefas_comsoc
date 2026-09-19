@@ -47,6 +47,13 @@ Front-end estático (Vite + TypeScript, sem framework) e **Supabase** como backe
 
 > A chave `anon` é pública por design e vai no JavaScript do site. **Nunca** use a chave `service_role` aqui.
 
+## Logo e ícones
+
+O logo original fica em `design/logo-original.png`. Para trocar a imagem, substitua esse arquivo e rode
+`python scripts/make-icons.py` (precisa de Pillow, numpy e scipy): ele remove o fundo branco e gera o logo
+da tela de login e do topo (`src/assets/`), o ícone da aba do navegador, o ícone do iPhone e os ícones do
+manifesto (`public/`), usados ao instalar o atalho no celular.
+
 ## Desenvolvimento
 
 ```bash

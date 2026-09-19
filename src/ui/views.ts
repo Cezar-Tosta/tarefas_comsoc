@@ -1,3 +1,5 @@
+import logoLarge from "../assets/logo-384.png";
+import logoSmall from "../assets/logo-96.png";
 import { PRIORITIES, PRIORITY_LABEL, ROLE_LABEL, ROLES, STATUS_LABEL, STATUSES } from "../labels";
 import { formatBR, formatDateTimeBR, todayISO } from "../lib/dates";
 import { hostLabel, isHttpUrl } from "../lib/links";
@@ -37,6 +39,13 @@ import type { Comment, Profile, Subtask, Task, TaskLink } from "../types";
 import { html, raw, type Safe } from "./html";
 import { linkify } from "./linkify";
 
+/** Logo grande das telas de acesso (substitui o título em texto). */
+function brandHero(): Safe {
+  return html`<h1 class="brand-hero">
+    <img src="${logoLarge}" alt="Tarefas COMSOC" width="168" height="168" />
+  </h1>`;
+}
+
 function emptyMessage(me: Profile): string {
   if (me.role === "user") {
     return "Você ainda não tem tarefas atribuídas. Quando um administrador atribuir uma tarefa ou subtarefa a você, ela aparecerá aqui.";
@@ -70,7 +79,7 @@ function activePeople(): Profile[] {
 export function setupView(): Safe {
   return html`<main class="auth">
     <section class="panel">
-      <h1>Tarefas COMSOC</h1>
+      ${brandHero()}
       <p>O Supabase ainda não foi configurado neste build.</p>
       <ol>
         <li>Crie um projeto em supabase.com e execute <code>supabase/schema.sql</code>.</li>
@@ -92,8 +101,8 @@ export function loginView(): Safe {
   const signup = state.authMode === "signup";
   return html`<main class="auth">
     <section class="panel">
-      <h1>Tarefas COMSOC</h1>
-      <p class="muted">${signup ? "Crie sua conta" : "Entre para continuar"}</p>
+      ${brandHero()}
+      <p class="muted center">${signup ? "Crie sua conta" : "Entre para continuar"}</p>
       <form data-form="auth" class="stack">
         ${
           signup &&
@@ -133,6 +142,7 @@ export function pendingView(): Safe {
   const me = currentUser();
   return html`<main class="auth">
     <section class="panel">
+      <img class="brand-hero" src="${logoLarge}" alt="" width="120" height="120" />
       <h1>Aguardando aprovação</h1>
       <p>
         Olá, <strong>${me.name || me.email}</strong>. Sua conta foi criada, mas um administrador
@@ -165,7 +175,7 @@ export function shellView(): Safe {
   const me = currentUser();
   return html`<div class="app">
     <header class="topbar">
-      <h1>Tarefas COMSOC</h1>
+      <h1 class="brand"><img src="${logoSmall}" alt="Tarefas COMSOC" width="44" height="44" /></h1>
       <nav class="tabs" aria-label="Seções">
         ${navTab("tasks", "Tarefas")} ${navTab("gantt", "Gantt")}
         ${canSeeReports(me) && navTab("reports", "Relatórios")}
