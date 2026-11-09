@@ -4,7 +4,9 @@ import { state } from "../state";
 import type { Profile, Task } from "../types";
 import {
   chatMessages,
+  accountDialog,
   confirmDialog,
+  pendingBanner,
   commentsDialog,
   ganttView,
   linkDialog,
@@ -782,5 +784,51 @@ describe("project management integration", () => {
     state.project = false;
     expect(taskDialog(null).value).not.toContain('name="budget"');
     state.project = true;
+  });
+});
+
+describe("pending sign-ups", () => {
+  const novo: Profile = { id: "n1", email: "novo@x", name: "Novo", role: "pending" };
+
+  it("flags pending accounts on the Users tab and on the dashboard for admins", () => {
+    state.profiles = [...state.profiles, novo];
+    expect(shellView().value).toMatch(
+      /data-view="users"[\s\S]*?Usuários\s*<span class="count-pill new"[^>]*>1</,
+    );
+    const banner = pendingBanner().value;
+    expect(banner).toContain("aguardando aprovação");
+    expect(banner).toMatch(/data-action="nav"\s+data-view="users"/);
+  });
+
+  it("shows nothing when there is no pending account or for non-admins", () => {
+    expect(pendingBanner().value).toBe("");
+    as(ana);
+    state.profiles = [...state.profiles, novo];
+    expect(pendingBanner().value).toBe("");
+  });
+
+  it("lists pending accounts first with one-click approve and reject", () => {
+    state.profiles = [...state.profiles, novo];
+    const out = usersView().value;
+    expect(out).toContain('class="pending-list"');
+    expect(out).toContain("novo@x");
+    expect(out).toMatch(/data-action="approve-user"\s+data-id="n1"\s+data-role="user"/);
+    expect(out).toMatch(/data-action="approve-user"\s+data-id="n1"\s+data-role="viewer"/);
+    expect(out).toMatch(/data-action="delete-user"\s+data-id="n1"/);
+  });
+});
+
+describe("account dialog", () => {
+  it("asks for the current password and the new one twice", () => {
+    const out = accountDialog().value;
+    expect(out).toContain('data-form="password"');
+    expect(out).toContain('name="current"');
+    expect(out).toMatch(/name="password"[^>]*minlength="8"/);
+    expect(out).toContain('name="confirm"');
+    expect(out).toContain("a@x");
+  });
+
+  it("is reachable from the top bar", () => {
+    expect(shellView().value).toContain('data-action="account"');
   });
 });

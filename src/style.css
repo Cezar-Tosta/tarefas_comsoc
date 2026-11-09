@@ -3132,3 +3132,109 @@ svg .pie-pending {
     min-height: 38px;
   }
 }
+
+/* ---------- minha conta e cadastros pendentes ---------- */
+
+button.who-name {
+  background: none;
+  border: 0;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-block;
+  text-decoration: underline;
+  text-decoration-color: rgb(255 255 255 / 35%);
+  text-underline-offset: 3px;
+}
+
+button.who-name:hover {
+  background: rgb(255 255 255 / 10%);
+}
+
+.dialog-subtitle {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+#alerts:empty {
+  display: none;
+}
+
+.pending-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  background: color-mix(in srgb, var(--h-attention) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--h-attention) 45%, var(--line));
+}
+
+.tab .count-pill {
+  margin-left: 6px;
+  background: var(--h-attention);
+  color: #ffffff;
+}
+
+.pending-list {
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--h-attention) 45%, var(--line));
+  border-left: 4px solid var(--h-attention);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.pending-list .section-title {
+  margin-bottom: 4px;
+}
+
+.pending-list p {
+  margin: 0 0 8px;
+}
+
+.pending-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.pending-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.pending-who {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pending-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (max-width: 720px) {
+  .pending-actions {
+    width: 100%;
+  }
+
+  .pending-actions .btn {
+    flex: 1 1 auto;
+    min-height: 40px;
+  }
+
+  .pending-banner .btn {
+    width: 100%;
+    min-height: 40px;
+  }
+}

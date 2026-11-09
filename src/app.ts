@@ -1,5 +1,5 @@
 import * as api from "./api";
-import { PRIORITIES, ROLES, STATUSES } from "./labels";
+import { PRIORITIES, ROLE_LABEL, ROLES, STATUSES } from "./labels";
 import { SORT_KEYS, type SortKey } from "./lib/control";
 import { JOURNAL_KINDS, MANUAL_KINDS, type JournalFilter } from "./lib/journal";
 import { tasksToCsv } from "./lib/csv";
@@ -18,8 +18,10 @@ import {
   chatMessages,
   currentTaskList,
   commentsDialog,
+  accountDialog,
   confirmDialog,
   type ConfirmOptions,
+  pendingBanner,
   ganttView,
   linkDialog,
   loginView,
@@ -56,6 +58,15 @@ function friendly(message: string): string {
   }
   if (/already registered/i.test(message)) {
     return "Este e-mail já está cadastrado.";
+  }
+  if (/different from the old password/i.test(message)) {
+    return "A nova senha precisa ser diferente da atual.";
+  }
+  if (/password should be at least/i.test(message)) {
+    return "A nova senha é curta demais.";
+  }
+  if (/weak password|password is known to be weak/i.test(message)) {
+    return "Senha fraca: use letras, números e símbolos.";
   }
   return message;
 }
@@ -117,6 +128,7 @@ export function render(): void {
 
 /** Atualiza resumo e conteúdo sem recriar a barra de filtros (preserva foco ao digitar). */
 function renderContent(): void {
+  mount(byId("alerts"), pendingBanner());
   mount(byId("summary"), state.view === "reports" ? summaryView(todayISO()) : html``);
   let content: Safe;
   if (state.view === "gantt") {
@@ -403,6 +415,15 @@ async function backgroundRefresh(): Promise<void> {
     const before = JSON.stringify([state.tasks, state.journal]);
     await loadTasks();
     await loadJournal();
+    // O administrador também precisa ver quem acabou de se cadastrar.
+    if (state.me && canManageUsers(state.me)) {
+      const profiles = await api.fetchProfiles();
+      if (JSON.stringify(profiles) !== JSON.stringify(state.profiles)) {
+        state.profiles = profiles;
+        render(); // o contador da aba Usuários fica no topo
+        return;
+      }
+    }
     if (JSON.stringify([state.tasks, state.journal]) !== before) {
       renderContent();
     }
@@ -631,6 +652,21 @@ const actions: Record<string, Handler> = {
       }
     }),
 
+  account: () => openDialog(accountDialog()),
+
+  "approve-user": (el) =>
+    run(async () => {
+      const person = state.profiles.find((p) => p.id === el.dataset["id"]);
+      if (!person) {
+        return;
+      }
+      const role = pick<Role>(["user", "viewer", "admin"], el.dataset["role"] ?? "", "user");
+      await api.updateProfile(person.id, { name: person.name || person.email, role });
+      state.profiles = await api.fetchProfiles();
+      render();
+      toast(`${person.name || person.email} aprovado(a) como ${ROLE_LABEL[role]}.`, "ok");
+    }),
+
   "edit-user": (el) => {
     const person = state.profiles.find((p) => p.id === el.dataset["id"]);
     if (person) {
@@ -657,7 +693,7 @@ const actions: Record<string, Handler> = {
       await api.deleteUser(person.id);
       closeDialog();
       await loadAll();
-      renderContent();
+      render(); // atualiza também o contador de pendentes no topo
     }),
 
   "open-comments": (el) =>
@@ -982,7 +1018,7 @@ async function submitUser(form: HTMLFormElement): Promise<void> {
   await api.updateProfile(id, { name, role });
   closeDialog();
   state.profiles = await api.fetchProfiles();
-  renderContent();
+  render(); // atualiza também o contador de pendentes no topo
 }
 
 async function submitExpense(form: HTMLFormElement): Promise<void> {
@@ -1024,6 +1060,32 @@ async function submitJournal(form: HTMLFormElement): Promise<void> {
   renderContent();
 }
 
+async function submitPassword(form: HTMLFormElement): Promise<void> {
+  const data = new FormData(form);
+  const current = field(data, "current");
+  const next = field(data, "password");
+  if (next.length < 8) {
+    formError(form, "A nova senha precisa ter pelo menos 8 caracteres.");
+    return;
+  }
+  if (next !== field(data, "confirm")) {
+    formError(form, "A confirmação não é igual à nova senha.");
+    return;
+  }
+  if (next === current) {
+    formError(form, "A nova senha precisa ser diferente da atual.");
+    return;
+  }
+  try {
+    await api.changePassword(currentUser().email, current, next);
+  } catch (error) {
+    formError(form, friendly(error instanceof Error ? error.message : String(error)));
+    return;
+  }
+  closeDialog();
+  toast("Senha alterada com sucesso.", "ok");
+}
+
 const forms: Record<string, (form: HTMLFormElement) => Promise<void>> = {
   auth: submitAuth,
   task: submitTask,
@@ -1033,6 +1095,7 @@ const forms: Record<string, (form: HTMLFormElement) => Promise<void>> = {
   link: submitLink,
   user: submitUser,
   expense: submitExpense,
+  password: submitPassword,
   journal: submitJournal,
 };
 

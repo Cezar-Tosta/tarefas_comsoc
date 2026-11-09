@@ -168,7 +168,12 @@ export function pendingView(): Safe {
 
 // ---------- estrutura principal ----------
 
-function navTab(view: View, label: string): Safe {
+/** Contas que aguardam um administrador definir o perfil. */
+export function pendingProfiles(): Profile[] {
+  return state.profiles.filter((p) => p.role === "pending");
+}
+
+function navTab(view: View, label: string, extra: Safe | false = false): Safe {
   const active = state.view === view || (state.view === "project" && state.projectBack === view);
   return html`<button
     class="tab"
@@ -177,7 +182,7 @@ function navTab(view: View, label: string): Safe {
     data-view="${view}"
     ${active && raw('aria-current="page"')}
   >
-    ${label}
+    ${label}${extra}
   </button>`;
 }
 
@@ -196,19 +201,56 @@ export function shellView(): Safe {
       <nav class="tabs" aria-label="Seções">
         ${navTab("dashboard", "Painel")} ${navTab("tasks", "Tarefas")} ${navTab("gantt", "Gantt")}
         ${canSeeReports(me) && navTab("reports", "Relatório")}
-        ${canManageUsers(me) && navTab("users", "Usuários")}
+        ${canManageUsers(me) && navTab("users", "Usuários", pendingPill())}
       </nav>
       <div class="who">
-        <span class="who-name">${me.name || me.email}</span>
+        <button
+          class="who-name"
+          type="button"
+          data-action="account"
+          title="Minha conta: trocar a senha"
+        >
+          ${me.name || me.email}
+        </button>
         <span class="badge role-${me.role}">${ROLE_LABEL[me.role]}</span>
         <button class="btn small" type="button" data-action="logout">Sair</button>
       </div>
     </header>
     <main class="page">
+      <section id="alerts" aria-label="Avisos"></section>
       <section id="summary" aria-label="Resumo"></section>
       <section id="toolbar" aria-label="Filtros"></section>
       <section id="content"></section>
     </main>
+  </div>`;
+}
+
+/** Contador de cadastros pendentes na aba Usuários. */
+function pendingPill(): Safe | false {
+  const count = pendingProfiles().length;
+  return (
+    count > 0 &&
+    html` <span class="count-pill new" title="${count} aguardando aprovação">${count}</span>`
+  );
+}
+
+/** Aviso ao administrador, em qualquer aba: há cadastros esperando aprovação. */
+export function pendingBanner(): Safe {
+  const me = currentUser();
+  const pending = pendingProfiles();
+  if (!canManageUsers(me) || pending.length === 0 || state.view === "users") {
+    return html``;
+  }
+  const one = pending.length === 1;
+  return html`<div class="notice pending-banner" role="status">
+    <span>
+      <strong>${pending.length} ${one ? "cadastro" : "cadastros"}</strong>
+      aguardando aprovação:
+      ${pending.map((p) => p.name || p.email).join(", ")}
+    </span>
+    <button class="btn small primary" type="button" data-action="nav" data-view="users">
+      Revisar
+    </button>
   </div>`;
 }
 
@@ -892,12 +934,7 @@ export function usersView(): Safe {
         ROLES.map((r) => ({ label: ROLE_LABEL[r], value: counts.get(r) ?? 0, tone: r })),
       )}
     </section>
-    ${
-      pending > 0 &&
-      html`<p class="notice">
-        ${pending} conta(s) aguardando aprovação. Defina um perfil para liberar o acesso.
-      </p>`
-    }
+    ${pending > 0 && pendingList()}
     <div class="table-wrap">
       <table class="users-table">
         <thead>
@@ -943,6 +980,70 @@ export function usersView(): Safe {
       ele. <strong>Visualizador:</strong> somente consulta. Clique em um usuário para editar ou excluir.
       Você não pode alterar nem excluir a própria conta.
     </p>`;
+}
+
+/** Cadastros pendentes com aprovação em um clique. */
+function pendingList(): Safe {
+  const pending = pendingProfiles();
+  return html`<section class="pending-list" aria-label="Aguardando aprovação">
+    <h2 class="section-title">Aguardando aprovação (${pending.length})</h2>
+    <p class="muted small">
+      Essas pessoas se cadastraram e ainda não têm acesso. Escolha o perfil para liberar, ou recuse
+      (a conta é excluída).
+    </p>
+    <ul>
+      ${pending.map(
+        (p) => html`<li>
+          <span class="pending-who">
+            <strong>${p.name || "—"}</strong>
+            <span class="muted">${p.email}</span>
+          </span>
+          <span class="pending-actions">
+            <button class="btn small primary" type="button" data-action="approve-user" data-id="${p.id}" data-role="user">
+              Aprovar como Usuário
+            </button>
+            <button class="btn small" type="button" data-action="approve-user" data-id="${p.id}" data-role="viewer">
+              Como Visualizador
+            </button>
+            <button class="btn small danger" type="button" data-action="delete-user" data-id="${p.id}">
+              Recusar
+            </button>
+          </span>
+        </li>`,
+      )}
+    </ul>
+  </section>`;
+}
+
+/** Minha conta: troca de senha (pede a atual para confirmar que é a própria pessoa). */
+export function accountDialog(): Safe {
+  const me = currentUser();
+  return html`<form data-form="password" class="stack">
+    <h2>Minha conta</h2>
+    <p class="muted small">
+      ${me.name || me.email} · ${me.email} · ${ROLE_LABEL[me.role]}
+    </p>
+    <h3 class="dialog-subtitle">Trocar senha</h3>
+    <input type="email" name="username" value="${me.email}" autocomplete="username" hidden />
+    <label
+      >Senha atual
+      <input name="current" type="password" required autocomplete="current-password" />
+    </label>
+    <label
+      >Nova senha
+      <input name="password" type="password" required minlength="8" autocomplete="new-password" />
+    </label>
+    <label
+      >Confirme a nova senha
+      <input name="confirm" type="password" required minlength="8" autocomplete="new-password" />
+    </label>
+    <p class="muted small">Mínimo de 8 caracteres.</p>
+    <p class="form-error" data-error role="alert"></p>
+    <div class="row end">
+      <button class="btn" type="button" data-action="close-dialog">Cancelar</button>
+      <button class="btn primary" type="submit">Salvar nova senha</button>
+    </div>
+  </form>`;
 }
 
 export function userDialog(person: Profile): Safe {

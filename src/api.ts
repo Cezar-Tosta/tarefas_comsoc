@@ -69,6 +69,19 @@ export async function signUp(email: string, password: string, name: string): Pro
   return data.session !== null;
 }
 
+/**
+ * Troca a senha de quem está logado. Antes confere a senha atual (um novo login com ela),
+ * para que uma sessão esquecida aberta não permita trocar a senha de outra pessoa.
+ */
+export async function changePassword(email: string, current: string, next: string): Promise<void> {
+  const verify = await db().auth.signInWithPassword({ email, password: current });
+  if (verify.error) {
+    throw new Error("A senha atual não confere.");
+  }
+  const { error } = await db().auth.updateUser({ password: next });
+  check(error);
+}
+
 export async function signOut(): Promise<void> {
   const { error } = await db().auth.signOut();
   check(error);
