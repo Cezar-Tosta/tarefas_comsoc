@@ -1,6 +1,13 @@
 {
   "name": "tarefas-comsoc",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "description": "Gestão de projetos leve: escopo, cronograma, orçamento, indicadores (SPI/CPI), diário de bordo e Gantt. TypeScript + Supabase.",
+  "author": "Cezar Tosta",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Cezar-Tosta/tarefas_comsoc.git"
+  },
   "private": true,
   "type": "module",
   "scripts": {

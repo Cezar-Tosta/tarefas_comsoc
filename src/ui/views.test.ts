@@ -14,6 +14,7 @@ import {
   reportsView,
   shellView,
   subtaskDialog,
+  taskDialog,
   summaryView,
   tasksView,
   toolbarView,
@@ -741,5 +742,45 @@ describe("logo", () => {
     as(vera);
     state.me = { ...vera, role: "pending" };
     expect(pendingView().value).toContain("brand-hero");
+  });
+});
+
+describe("project management integration", () => {
+  it("offers the dashboard tab first and keeps it highlighted on a project page", () => {
+    const shell = shellView().value;
+    expect(shell.indexOf('data-view="dashboard"')).toBeLessThan(shell.indexOf('data-view="tasks"'));
+    state.view = "project";
+    state.projectBack = "dashboard";
+    expect(shellView().value).toMatch(/data-view="dashboard"\s+aria-current="page"/);
+    state.view = "tasks";
+  });
+
+  it("filters by health in the toolbar of every tab", () => {
+    expect(toolbarView().value).toContain('data-filter="health"');
+    expect(toolbarView("gantt").value).toContain('data-filter="health"');
+  });
+
+  it("opens the project page from the task card and from the Gantt task row", () => {
+    expect(tasksView().value).toContain('data-action="open-project" data-id="t1"');
+    as(vera); // até o visualizador abre o projeto pelo Gantt
+    const gantt = ganttView().value;
+    expect(gantt).toMatch(/data-action="open-project"\s+data-id="t1"/);
+    expect(gantt).toContain("dot health-");
+  });
+
+  it("adds scope, acceptance criteria, budget and baseline to the task form", () => {
+    state.project = true;
+    const task = { ...makeTasks()[0]!, budget: 500, baseline_end: "2026-09-30" };
+    const out = taskDialog(task).value;
+    expect(out).toContain('name="scope"');
+    expect(out).toContain('name="success_criteria"');
+    expect(out).toMatch(/name="budget"[\s\S]*value="500"/);
+    expect(out).toContain('name="reset_baseline"');
+  });
+
+  it("leaves the project fields out without the 008 migration", () => {
+    state.project = false;
+    expect(taskDialog(null).value).not.toContain('name="budget"');
+    state.project = true;
   });
 });

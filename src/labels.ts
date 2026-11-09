@@ -1,4 +1,4 @@
-import type { Priority, Role, Status } from "./types";
+import type { JournalKind, Priority, Role, Status } from "./types";
 
 export const STATUS_LABEL: Record<Status, string> = {
   todo: "A fazer",
@@ -23,3 +23,13 @@ export const ROLE_LABEL: Record<Role, string> = {
 export const STATUSES: Status[] = ["todo", "doing", "blocked", "done"];
 export const PRIORITIES: Priority[] = ["low", "medium", "high"];
 export const ROLES: Role[] = ["admin", "user", "viewer", "pending"];
+
+export const JOURNAL_LABEL: Record<JournalKind, string> = {
+  note: "Anotação",
+  progress: "Avanço",
+  decision: "Decisão",
+  risk: "Risco",
+  issue: "Problema",
+  milestone: "Marco",
+  system: "Automático",
+};

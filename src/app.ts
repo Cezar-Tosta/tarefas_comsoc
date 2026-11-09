@@ -1,5 +1,7 @@
 import * as api from "./api";
 import { PRIORITIES, ROLES, STATUSES } from "./labels";
+import { SORT_KEYS, type SortKey } from "./lib/control";
+import { JOURNAL_KINDS, MANUAL_KINDS, type JournalFilter } from "./lib/journal";
 import { tasksToCsv } from "./lib/csv";
 import { todayISO } from "./lib/dates";
 import { DEFAULT_FILTERS, filterTasks } from "./lib/filters";
@@ -9,7 +11,8 @@ import { markMine, markSeen, reconcile } from "./lib/unread";
 import { wouldCreateCycle } from "./lib/subtaskDates";
 import { canManageUsers, canSeeReports, visibleTasks } from "./lib/permissions";
 import { currentUser, loadRead, saveRead, savePrefs, state, type View } from "./state";
-import type { Priority, Role, Status, TaskInput } from "./types";
+import { dashboardView, projectView } from "./ui/project";
+import type { JournalKind, Priority, Role, Status, TaskInput } from "./types";
 import { html, mount, type Safe } from "./ui/html";
 import {
   chatMessages,
@@ -103,7 +106,7 @@ export function render(): void {
       mount(app, shellView());
       mount(
         byId("toolbar"),
-        state.view === "users" || state.view === "reports"
+        state.view === "users" || state.view === "reports" || state.view === "project"
           ? html``
           : toolbarView(state.view === "gantt" ? "gantt" : "tasks"),
       );
@@ -122,6 +125,10 @@ function renderContent(): void {
     content = reportsView();
   } else if (state.view === "users") {
     content = usersView();
+  } else if (state.view === "dashboard") {
+    content = dashboardView();
+  } else if (state.view === "project") {
+    content = projectView();
   } else {
     content = tasksView();
   }
@@ -150,16 +157,37 @@ function syncRead(): void {
 }
 
 async function loadTasks(): Promise<void> {
-  const { tasks, extras } = await api.fetchTasks();
+  const { tasks, extras, project } = await api.fetchTasks();
   state.tasks = visibleTasks(currentUser(), tasks);
   state.extras = extras;
+  state.project = project;
   syncRead();
+}
+
+/** Diário de bordo do projeto aberto (o banco acrescenta registros a cada mudança). */
+async function loadJournal(): Promise<void> {
+  const taskId = state.projectId;
+  if (state.view !== "project" || !taskId || !state.project) {
+    return;
+  }
+  const entries = await api.fetchJournal(taskId);
+  if (state.projectId === taskId) {
+    state.journal = entries;
+  }
+}
+
+/** Recarrega as tarefas (e o diário, se um projeto estiver aberto) e redesenha. */
+async function reload(): Promise<void> {
+  await loadTasks();
+  await loadJournal();
+  renderContent();
 }
 
 async function loadAll(): Promise<void> {
   const [loaded, profiles] = await Promise.all([api.fetchTasks(), api.fetchProfiles()]);
   state.tasks = visibleTasks(currentUser(), loaded.tasks);
   state.extras = loaded.extras;
+  state.project = loaded.project;
   state.profiles = profiles;
   syncRead();
 }
@@ -192,6 +220,7 @@ export async function boot(): Promise<void> {
       return;
     }
     await loadAll();
+    await loadJournal();
     if (state.view === "users" && !canManageUsers(profile)) {
       state.view = "tasks";
     }
@@ -371,9 +400,10 @@ async function backgroundRefresh(): Promise<void> {
     }
   }
   try {
-    const before = JSON.stringify(state.tasks);
+    const before = JSON.stringify([state.tasks, state.journal]);
     await loadTasks();
-    if (JSON.stringify(state.tasks) !== before) {
+    await loadJournal();
+    if (JSON.stringify([state.tasks, state.journal]) !== before) {
       renderContent();
     }
   } catch {
@@ -409,6 +439,8 @@ const actions: Record<string, Handler> = {
     if (!view) {
       return;
     }
+    state.projectId = null;
+    state.journal = [];
     state.view = view;
     savePrefs();
     render();
@@ -510,8 +542,7 @@ const actions: Record<string, Handler> = {
         return;
       }
       await api.completeTask(task.id);
-      await loadTasks();
-      renderContent();
+      await reload();
     }),
 
   "edit-task": (el) => {
@@ -541,8 +572,10 @@ const actions: Record<string, Handler> = {
         return;
       }
       await api.deleteTask(task.id);
-      await loadTasks();
-      renderContent();
+      if (state.view === "project") {
+        leaveProject();
+      }
+      await reload();
     }),
 
   "edit-sub": (el) => {
@@ -570,8 +603,7 @@ const actions: Record<string, Handler> = {
         return;
       }
       await api.deleteSubtask(subtask.id);
-      await loadTasks();
-      renderContent();
+      await reload();
     }),
 
   "toggle-sub": (el) =>
@@ -590,9 +622,11 @@ const actions: Record<string, Handler> = {
       renderContent();
       try {
         await api.updateSubtask(subtask.id, { done });
+        if (state.view === "project") {
+          await reload(); // traz o registro automático do diário
+        }
       } catch (error) {
-        await loadTasks();
-        renderContent();
+        await reload();
         throw error;
       }
     }),
@@ -670,8 +704,7 @@ const actions: Record<string, Handler> = {
   "delete-link": (el) =>
     run(async () => {
       await api.deleteLink(el.dataset["id"] ?? "");
-      await loadTasks();
-      renderContent();
+      await reload();
     }),
 
   // Início vinculado ao término de outra subtarefa: trava o campo de data de início.
@@ -682,8 +715,106 @@ const actions: Record<string, Handler> = {
     }
   },
 
+  "open-project": (el) =>
+    run(async () => {
+      const id = el.dataset["id"];
+      if (!id) {
+        return;
+      }
+      if (state.view !== "project") {
+        state.projectBack = state.view;
+        history.pushState({ project: id }, "");
+      }
+      state.projectId = id;
+      state.journal = [];
+      state.journalFilter = "all";
+      state.view = "project";
+      closeDialog();
+      render();
+      window.scrollTo({ top: 0 });
+      await loadJournal();
+      renderContent();
+    }),
+
+  back: () => {
+    if ((history.state as { project?: string } | null)?.project) {
+      history.back(); // o "popstate" chama leaveProject
+      return;
+    }
+    leaveProject();
+  },
+
+  "set-layout": (el) => {
+    state.dashLayout = el.dataset["layout"] === "list" ? "list" : "cards";
+    savePrefs();
+    renderContent();
+  },
+
+  "set-scope": (el) => {
+    state.dashScope = el.dataset["scope"] === "all" ? "all" : "open";
+    savePrefs();
+    renderContent();
+  },
+
+  "journal-filter": (el) => {
+    const kind = el.dataset["kind"] ?? "all";
+    state.journalFilter = pick<JournalFilter>(["all", "manual", ...JOURNAL_KINDS], kind, "all");
+    renderContent();
+  },
+
+  "delete-expense": (el) =>
+    run(async () => {
+      const task = state.tasks.find((t) => t.id === state.projectId);
+      const expense = task?.expenses?.find((e) => e.id === el.dataset["id"]);
+      if (!expense) {
+        return;
+      }
+      if (
+        !(await confirmDelete(
+          expense.description,
+          "Remover despesa?",
+          "O valor deixa de contar no realizado. A remoção fica registrada no diário de bordo.",
+        ))
+      ) {
+        return;
+      }
+      await api.deleteExpense(expense.id);
+      await reload();
+    }),
+
+  "delete-journal": (el) =>
+    run(async () => {
+      const entry = state.journal.find((j) => j.id === el.dataset["id"]);
+      if (!entry) {
+        return;
+      }
+      if (
+        !(await confirmDelete(
+          entry.body.slice(0, 80),
+          "Apagar registro do diário?",
+          "Esta ação não pode ser desfeita.",
+        ))
+      ) {
+        return;
+      }
+      await api.deleteJournal(entry.id);
+      await loadJournal();
+      renderContent();
+    }),
+
   "close-dialog": closeDialog,
 };
+
+/** Sai da página do projeto para a aba de onde ela foi aberta. */
+function leaveProject(): void {
+  if (state.view !== "project") {
+    return;
+  }
+  state.view = state.projectBack;
+  state.projectId = null;
+  state.journal = [];
+  render();
+}
 
 // ---------- formulários ----------
 
@@ -725,6 +856,21 @@ async function submitTask(form: HTMLFormElement): Promise<void> {
       ? field(data, "assignee_id") || null
       : (existing?.assignee_id ?? null),
   };
+  if (state.project) {
+    const budgetText = field(data, "budget").trim().replace(",", ".");
+    const budget = budgetText === "" ? null : Number(budgetText);
+    if (budget !== null && (!Number.isFinite(budget) || budget < 0)) {
+      formError(form, "Informe um orçamento válido (zero ou mais).");
+      return;
+    }
+    input.scope = field(data, "scope").trim();
+    input.success_criteria = field(data, "success_criteria").trim();
+    input.budget = budget;
+    if (data.has("reset_baseline")) {
+      input.baseline_start = start;
+      input.baseline_end = end;
+    }
+  }
   if (!input.title) {
     formError(form, "Informe um título.");
     return;
@@ -736,8 +882,7 @@ async function submitTask(form: HTMLFormElement): Promise<void> {
   }
   await api.saveTask(id, input);
   closeDialog();
-  await loadTasks();
-  renderContent();
+  await reload();
 }
 
 async function submitSubtask(form: HTMLFormElement): Promise<void> {
@@ -776,8 +921,7 @@ async function submitSubtask(form: HTMLFormElement): Promise<void> {
     ...(data.has("assignee_id") ? { assignee_id: field(data, "assignee_id") || null } : {}),
   });
   closeDialog();
-  await loadTasks();
-  renderContent();
+  await reload();
 }
 
 async function submitAddSub(form: HTMLFormElement): Promise<void> {
@@ -791,8 +935,7 @@ async function submitAddSub(form: HTMLFormElement): Promise<void> {
     position = Math.max(position, subtask.position + 1);
   }
   await api.createSubtask(task.id, position, { title });
-  await loadTasks();
-  renderContent();
+  await reload();
 }
 
 async function submitComment(form: HTMLFormElement): Promise<void> {
@@ -820,8 +963,7 @@ async function submitLink(form: HTMLFormElement): Promise<void> {
   }
   await api.addLink(taskId, url, field(data, "title").trim());
   closeDialog();
-  await loadTasks();
-  renderContent();
+  await reload();
 }
 
 async function submitUser(form: HTMLFormElement): Promise<void> {
@@ -843,6 +985,45 @@ async function submitUser(form: HTMLFormElement): Promise<void> {
   renderContent();
 }
 
+async function submitExpense(form: HTMLFormElement): Promise<void> {
+  const taskId = form.dataset["task"];
+  const data = new FormData(form);
+  const description = field(data, "description").trim();
+  const amount = Number(field(data, "amount").replace(",", "."));
+  const spentOn = field(data, "spent_on") || todayISO();
+  if (!taskId) {
+    return;
+  }
+  if (!description) {
+    formError(form, "Descreva a despesa.");
+    return;
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    formError(form, "Informe um valor maior que zero.");
+    return;
+  }
+  await api.addExpense(taskId, {
+    description,
+    amount: Math.round(amount * 100) / 100,
+    spent_on: spentOn,
+  });
+  await reload();
+}
+
+async function submitJournal(form: HTMLFormElement): Promise<void> {
+  const taskId = form.dataset["task"];
+  const data = new FormData(form);
+  const body = field(data, "body").trim();
+  const kind = pick<JournalKind>(MANUAL_KINDS, field(data, "kind"), "note");
+  if (!taskId || !body) {
+    return;
+  }
+  await api.addJournal(taskId, kind, body);
+  form.reset();
+  await loadJournal();
+  renderContent();
+}
+
 const forms: Record<string, (form: HTMLFormElement) => Promise<void>> = {
   auth: submitAuth,
   task: submitTask,
@@ -851,6 +1032,8 @@ const forms: Record<string, (form: HTMLFormElement) => Promise<void>> = {
   comment: submitComment,
   link: submitLink,
   user: submitUser,
+  expense: submitExpense,
+  journal: submitJournal,
 };
 
 // ---------- ligação de eventos ----------
@@ -888,6 +1071,9 @@ export function bindEvents(): void {
       renderContent();
     }
   });
+
+  // Voltar do navegador/celular fecha a página do projeto.
+  window.addEventListener("popstate", leaveProject);
 
   // Atualização em segundo plano: traz comentários novos de outras pessoas sem recarregar a página.
   setInterval(() => void backgroundRefresh(), BACKGROUND_REFRESH_MS);
@@ -931,6 +1117,12 @@ export function bindEvents(): void {
         filter,
         el instanceof HTMLInputElement && el.type === "checkbox" ? el.checked : el.value,
       );
+      return;
+    }
+    if (el.dataset["pref"] === "dashSort") {
+      state.dashSort = pick<SortKey>(SORT_KEYS, el.value, "deadline");
+      savePrefs();
+      renderContent();
       return;
     }
     if (el.dataset["pref"] === "showSubtasks" && el instanceof HTMLInputElement) {

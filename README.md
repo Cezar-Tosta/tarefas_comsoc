@@ -1,80 +1,155 @@
 # Tarefas COMSOC
 
-Painel de tarefas e subtarefas para publicar no **GitHub Pages**, com Gantt, filtros e perfis de acesso.
-Front-end estático (Vite + TypeScript, sem framework) e **Supabase** como backend (login + Postgres).
+**Gestão de projetos leve para equipes de comunicação:** cada tarefa é um projeto com escopo,
+cronograma, orçamento, indicadores de controle e um diário de bordo que guarda a memória do
+trabalho. Inclui painel em cards ou lista, Gantt, relatórios por pessoa e perfis de acesso.
 
-## O que faz
+[![Deploy](https://github.com/Cezar-Tosta/tarefas_comsoc/actions/workflows/deploy.yml/badge.svg)](https://github.com/Cezar-Tosta/tarefas_comsoc/actions/workflows/deploy.yml)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)
+![Vite](https://img.shields.io/badge/Vite-8-646cff)
+![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3ecf8e)
+![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
-- **Tarefas e subtarefas**: cadastrar, editar, excluir; responsável, prioridade, status, datas de início/fim.
-- **Lista de tarefas**: cada tarefa aparece encolhida (só o nome, com "Faltam N dias", "HOJE" ou "Atrasada há N dias"); ao clicar, abre com todos os detalhes. Um switch "Encolher tudo / Expandir tudo" controla todas de uma vez.
-- **Confirmação**: concluir e excluir (tarefa, subtarefa, usuário, comentário) pedem confirmação num popup no visual do site.
-- **Arquivados**: a aba Tarefas tem as listas "Ativas" e "Arquivados"; tarefas concluídas há 10 dias ou mais vão para Arquivados (a data de conclusão é registrada pelo banco). Reabrir a tarefa a traz de volta.
-- **Comentários novos**: um aviso no topo da aba Tarefas lista as tarefas com comentários que você ainda não leu (as suas, com subtarefa sua, ou em que você comentou), e cada tarefa mostra o selo "N novos". O controle do que já foi lido fica no navegador, e a lista é atualizada sozinha a cada minuto.
-- **Progresso**: percentual por tarefa calculado pelas subtarefas concluídas + progresso geral.
-- **Subtarefas**: checkbox; as concluídas ficam riscadas e agrupadas em um bloco recolhido ("Concluídas (n)"). Uma subtarefa pode **começar logo após o término de outra** (o início vira o dia seguinte ao fim da anterior e acompanha as mudanças dela). Usuários comuns veem só o essencial, sem datas.
-- **Gantt**: escala por dia/semana/mês, linha de "hoje", barras com progresso, subtarefas opcionais, atrasadas em vermelho. Só tem os filtros básicos; "Ocultar concluídas" fica junto de "Mostrar subtarefas".
-- **Filtros** (valem para lista, Gantt e exportação): busca, status (inclui "atrasadas"), responsável, prioridade, período, ocultar concluídas. Ficam salvos no navegador.
-- **Comentários** em cada tarefa, em formato de chat (atualiza sozinho a cada 8 s enquanto aberto). Administradores e usuários comentam; visualizadores só leem. Apaga quem escreveu ou um administrador. Links coladas no texto viram clicáveis.
-- **Links** anexados à tarefa (título opcional; só http/https). Quem edita a tarefa adiciona e remove.
-- **Relatório**: gráficos de pizza compactos. O administrador vê o andamento por pessoa (tarefas e subtarefas, atrasos, próximos prazos); cada usuário vê o seu. Mostra dias de atraso, dias que faltam, maior atraso e o que vence em 7 dias. Na lista de itens, as subtarefas aparecem recuadas abaixo da tarefa e em outra cor, sem datas nem status. Cada pessoa aparece encolhida, com o mesmo switch "Encolher tudo / Expandir tudo". Visualizadores não têm essa aba.
-- **Usuários** (administrador): tabela compacta; ao clicar em um usuário abre o diálogo para editar (nome e perfil) ou excluir. Há também um resumo com o total e uma pizza por perfil. Não dá para editar nem excluir a própria conta.
-- **Visibilidade**: o usuário só vê tarefas em que é responsável (pela tarefa ou por uma subtarefa). Sem nada atribuído, as abas ficam vazias com um aviso. Administrador e visualizador veem tudo.
-- **Exportar CSV** (abre direto no Excel).
-- **Perfis**:
+> _English summary:_ a lightweight project-management web app (TypeScript, no framework,
+> Supabase/Postgres with Row Level Security). Each task is a project with scope, schedule
+> baseline, budget and expenses, earned-value indicators (SPI/CPI), a health score and an
+> append-only logbook fed by database triggers. Deployed as a static site on GitHub Pages.
 
-  | Perfil               | Pode                                                                                                                      |
-  | -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-  | Administrador        | Tudo: criar/editar/excluir tarefas e subtarefas, atribuir responsáveis, gerir usuários                                    |
-  | Usuário              | Nas tarefas/subtarefas atribuídas a ele: **marcar como concluída** e **comentar**. Não altera datas nem dados, nem exclui |
-  | Visualizador         | Somente consulta                                                                                                          |
-  | Aguardando aprovação | Sem acesso até um administrador definir o perfil                                                                          |
+![Painel de projetos](docs/screenshots/painel.png)
 
-  O **primeiro cadastro vira administrador**; os seguintes entram como "aguardando aprovação", sem e-mail de confirmação (veja o passo 3 da configuração).
-  As permissões são **aplicadas no banco** (Row Level Security em `supabase/schema.sql`); a interface apenas esconde o que não se pode fazer.
+<table>
+  <tr>
+    <td width="62%"><img src="docs/screenshots/projeto.png" alt="Página do projeto" /></td>
+    <td><img src="docs/screenshots/celular.png" alt="Versão para celular" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Página do projeto: escopo, controle, cronograma, orçamento e diário</sub></td>
+    <td align="center"><sub>Celular: painel, projeto e lista</sub></td>
+  </tr>
+</table>
 
-## Configuração (uma vez)
+<sub>Capturas com dados fictícios.</sub>
+
+## Destaques
+
+| Área | O que tem |
+| --- | --- |
+| **Projeto** | Escopo e entregáveis, critérios de aceite, responsável, prioridade, links e etapas (subtarefas) com dependência "começa após". |
+| **Cronograma** | Período planejado, **linha de base** gravada pelo banco, desvio em dias e mini-cronograma das etapas com a linha de hoje. |
+| **Orçamento** | Previsto × realizado, lançamento de despesas, saldo, % consumido e **valor agregado**. |
+| **Controle** | Avanço físico, prazo decorrido, **SPI** e **CPI** e uma **saúde** (no rumo, atenção, crítico) que explica os motivos. |
+| **Diário de bordo** | Anotações, avanços, decisões, riscos, problemas e marcos, mais **registros automáticos** de toda mudança relevante. Os registros não podem ser editados. |
+| **Painel** | Projetos em andamento em **cards ou lista**, com indicadores do portfólio, ordenação (prazo, saúde, progresso, nome) e filtros. |
+| **Gantt** | Aba própria com escala dia/semana/mês, subtarefas, linha de hoje, saúde por projeto e os mesmos filtros. |
+| **Equipe** | Relatório por pessoa com gráficos, comentários em formato de chat com aviso de mensagens novas, lista de arquivados, exportação CSV. |
+| **Acesso** | Perfis Administrador, Usuário, Visualizador e Aguardando aprovação, com as regras **aplicadas no banco** (RLS). |
+| **Responsivo** | Ajustado para celular (360 px ou mais), notebook (1366×768) e telas largas. Pode ser instalado como app (PWA). |
+
+Os detalhes de cada indicador estão em [docs/GESTAO-DE-PROJETOS.md](docs/GESTAO-DE-PROJETOS.md)
+e as decisões técnicas em [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
+
+## Stack
+
+- **Front-end:** TypeScript estrito, sem framework. A renderização usa um template tag próprio
+  que escapa todo o HTML por padrão. Build com Vite.
+- **Back-end:** Supabase, com Auth e Postgres. A segurança fica em políticas **Row Level
+  Security** e em gatilhos (`supabase/*.sql`).
+- **Qualidade:** `tsc --noEmit`, `oxlint`, `oxfmt` e **vitest**, com mais de 200 testes da lógica
+  pura e das telas.
+- **Entrega:** GitHub Actions roda typecheck, lint, testes e build e publica no GitHub Pages.
+  As actions são fixadas por SHA.
+
+```
+src/
+├── lib/        lógica pura e testada: controle (SPI/CPI/saúde), diário, filtros, Gantt,
+│               progresso, permissões, relatórios, CSV, datas
+├── ui/         telas (views.ts, project.ts) e o template tag seguro (html.ts)
+├── app.ts      eventos, ações e formulários
+├── api.ts      acesso ao Supabase
+└── state.ts    estado da aplicação e preferências salvas no navegador
+supabase/       esquema, migrações, RLS e gatilhos (diário automático, linha de base)
+docs/           arquitetura, indicadores e capturas de tela
+```
+
+## Perfis
+
+| Perfil | Pode |
+| --- | --- |
+| Administrador | Tudo: criar, editar e excluir projetos e etapas, orçamento e despesas, atribuir responsáveis e gerir usuários |
+| Usuário | Nos projetos ligados a ele: concluir, comentar e registrar no diário de bordo. Não altera dados nem exclui |
+| Visualizador | Somente consulta |
+| Aguardando aprovação | Sem acesso até um administrador definir o perfil |
+
+O **primeiro cadastro vira administrador**. Os seguintes entram como "aguardando aprovação".
+A interface só esconde o que não se pode fazer. Quem realmente bloqueia é o banco.
+
+## Como rodar
+
+### 1. Banco (Supabase)
 
 1. Crie um projeto em <https://supabase.com>.
-2. No **SQL Editor**, cole e execute o **conteúdo** de `supabase/schema.sql` e, em seguida, de `supabase/002_comments_links.sql` (comentários e links), `supabase/003_user_visibility.sql` (cada usuário só enxerga o que está ligado a ele), `supabase/004_delete_user.sql` (excluir usuários pela aba Usuários; sem ela o botão Excluir dá erro), `supabase/005_subtask_start_after.sql` (subtarefa que começa após o término de outra; sem ela só esse vínculo falha), `supabase/006_user_completes_only.sql` (**importante**: no banco, usuários só concluem e comentam; sem ela a restrição existe só na interface) e `supabase/007_task_completed_at.sql` (data de conclusão, base dos Arquivados; sem ela nada é arquivado). Rode cada um, nessa ordem.
-3. Em **Authentication → Providers → Email**, **desative "Confirm email"**: novas contas
-   não recebem e-mail de confirmação e só aguardam a aprovação de um administrador (com a opção ligada, o cadastro
-   exige confirmar o e-mail antes do primeiro login). Em **Authentication → URL Configuration**,
-   coloque a URL do seu Pages (`https://<usuario>.github.io/<repo>/`) em _Site URL_.
+2. No **SQL Editor**, execute **em ordem** o conteúdo de:
+
+   | Arquivo | Para quê |
+   | --- | --- |
+   | `supabase/schema.sql` | Tabelas, perfis, RLS e gatilhos base |
+   | `002_comments_links.sql` | Comentários e links |
+   | `003_user_visibility.sql` | Cada usuário vê só o que está ligado a ele |
+   | `004_delete_user.sql` | Excluir usuários pela aba Usuários |
+   | `005_subtask_start_after.sql` | Etapa que começa após o término de outra |
+   | `006_user_completes_only.sql` | **Importante:** no banco, usuários só concluem e comentam |
+   | `007_task_completed_at.sql` | Data de conclusão (base dos Arquivados) |
+   | `008_project_management.sql` | **Gestão de projeto:** escopo, orçamento, despesas, linha de base e diário de bordo |
+
+   Sem uma migração, o recurso correspondente fica oculto ou avisa o que falta, e o restante
+   continua funcionando.
+
+3. Em **Authentication → Providers → Email**, desative **"Confirm email"**. Assim as novas
+   contas só aguardam a aprovação de um administrador. Em **Authentication → URL
+   Configuration**, informe a URL do Pages (`https://<usuario>.github.io/<repo>/`).
 4. Copie **Project URL** e a chave **anon** (Project Settings → API).
-5. Local: `cp .env.example .env.local`, preencha, e rode `pnpm install && pnpm dev`.
-6. **Cadastre-se pelo próprio site** com o e-mail que será o administrador (o primeiro cadastro é admin).
 
-## Publicar no GitHub Pages
+### 2. Local
 
-1. Crie o repositório no GitHub e envie o código (branch `main`).
-2. _Settings → Pages → Source_: **GitHub Actions**.
-3. _Settings → Secrets and variables → Actions → **Variables**_: crie `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`.
-4. Todo push em `main` roda typecheck, lint, testes, build e publica (`.github/workflows/deploy.yml`).
+```bash
+cp .env.example .env.local   # preencha VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY
+pnpm install
+pnpm dev                     # http://localhost:5173
+```
 
-> A chave `anon` é pública por design e vai no JavaScript do site. **Nunca** use a chave `service_role` aqui.
+Cadastre-se pelo próprio site com o e-mail do administrador.
 
-## Logo e ícones
+### 3. GitHub Pages
 
-O logo original fica em `design/logo-original.png`. Para trocar a imagem, substitua esse arquivo e rode
-`python scripts/make-icons.py` (precisa de Pillow, numpy e scipy): ele remove o fundo branco e gera o logo
-da tela de login e do topo (`src/assets/`), o ícone da aba do navegador, o ícone do iPhone e os ícones do
-manifesto (`public/`), usados ao instalar o atalho no celular.
+1. _Settings → Pages → Source_: **GitHub Actions**.
+2. _Settings → Secrets and variables → Actions → **Variables**_: crie `VITE_SUPABASE_URL` e
+   `VITE_SUPABASE_ANON_KEY`.
+3. Cada push em `main` valida e publica (`.github/workflows/deploy.yml`).
+
+> A chave `anon` é pública por design. A proteção dos dados está nas políticas RLS. **Nunca**
+> use a chave `service_role` no front-end.
 
 ## Desenvolvimento
 
 ```bash
-pnpm install
-pnpm dev          # servidor local
-pnpm check        # tsc + oxlint + vitest
-pnpm build        # gera dist/
-pnpm oxfmt        # formata
+pnpm check     # tsc + oxlint + vitest
+pnpm test      # só os testes
+pnpm build     # gera dist/
+pnpm format    # oxfmt
 ```
 
-Estrutura: `src/lib/` (lógica pura testada: progresso, filtros, Gantt, permissões, CSV, relatórios, datas de subtarefas), `src/ui/` (telas),
-`src/app.ts` (eventos e ações), `src/api.ts` (Supabase), `supabase/schema.sql` (tabelas, RLS, gatilhos).
+O logo original fica em `design/logo-original.png`. Para gerar de novo os ícones (favicon,
+PWA, iPhone), rode `python scripts/make-icons.py` (precisa de Pillow, numpy e scipy).
 
-## Ideias para próximas versões
+## Roadmap
 
-Histórico de alterações por tarefa · comentários em tempo real (Realtime) · setas de dependência no Gantt ·
-visão Kanban e calendário · arrastar barras do Gantt para mudar datas · anexos de arquivos ·
-tarefas recorrentes e modelos · avisos de prazo por e-mail · importação de CSV.
+- Curva S (planejado × realizado) e histórico de SPI/CPI ao longo do tempo
+- Matriz de riscos (probabilidade × impacto) a partir do diário de bordo
+- Arrastar barras do Gantt e setas de dependência
+- Comentários e diário em tempo real (Supabase Realtime)
+- Anexos de arquivos e modelos de projeto
+- Avisos de prazo por e-mail
+
+## Licença
+
+[MIT](LICENSE) © Cezar Tosta

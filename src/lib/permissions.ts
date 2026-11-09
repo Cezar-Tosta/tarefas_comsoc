@@ -1,4 +1,4 @@
-import type { Profile, Subtask, Task } from "../types";
+import type { JournalKind, Profile, Subtask, Task } from "../types";
 import { involvesPerson } from "./filters";
 
 // Espelha as políticas RLS de supabase/schema.sql. A segurança real está no banco;
@@ -86,4 +86,19 @@ export function visibleTasks(me: Profile, tasks: Task[]): Task[] {
     return tasks.filter((task) => involvesPerson(task, me.id));
   }
   return [];
+}
+
+/** Diário de bordo: quem comenta também registra (anotações, decisões, riscos…). */
+export function canWriteJournal(me: Profile): boolean {
+  return canComment(me);
+}
+
+/** O diário é a memória do projeto: só o administrador apaga, e nunca um registro automático. */
+export function canDeleteJournal(me: Profile, entry: { kind: JournalKind }): boolean {
+  return me.role === "admin" && entry.kind !== "system";
+}
+
+/** Despesas (custo real do projeto): somente o administrador lança e remove. */
+export function canManageExpenses(me: Profile): boolean {
+  return me.role === "admin";
 }

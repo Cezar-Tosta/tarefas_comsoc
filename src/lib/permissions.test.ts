@@ -12,7 +12,10 @@ import {
   canManageSubtasks,
   canManageUsers,
   canSeeReports,
+  canDeleteJournal,
+  canManageExpenses,
   canToggleSubtask,
+  canWriteJournal,
   visibleTasks,
 } from "./permissions";
 
@@ -137,5 +140,21 @@ describe("permissions", () => {
     expect(canSeeReports(user)).toBe(true);
     expect(canSeeReports(viewer)).toBe(false);
     expect(canSeeReports(pending)).toBe(false);
+  });
+
+  it("logbook: admins and users write; only admins delete, never automatic entries", () => {
+    expect(canWriteJournal(admin)).toBe(true);
+    expect(canWriteJournal(user)).toBe(true);
+    expect(canWriteJournal(viewer)).toBe(false);
+    expect(canWriteJournal(pending)).toBe(false);
+    expect(canDeleteJournal(admin, { kind: "note" })).toBe(true);
+    expect(canDeleteJournal(admin, { kind: "system" })).toBe(false);
+    expect(canDeleteJournal(user, { kind: "note" })).toBe(false);
+  });
+
+  it("expenses are managed by admins only", () => {
+    expect(canManageExpenses(admin)).toBe(true);
+    expect(canManageExpenses(user)).toBe(false);
+    expect(canManageExpenses(viewer)).toBe(false);
   });
 });

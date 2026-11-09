@@ -4,6 +4,7 @@ import { PRIORITIES, PRIORITY_LABEL, ROLE_LABEL, ROLES, STATUS_LABEL, STATUSES }
 import { formatBR, formatDateTimeBR, todayISO } from "../lib/dates";
 import { hostLabel, isHttpUrl } from "../lib/links";
 import { filterTasks } from "../lib/filters";
+import { computeControl, HEALTH_LABEL, HEALTHS, type Health } from "../lib/control";
 import { computeMetrics, metricsScope } from "../lib/metrics";
 import { ARCHIVE_AFTER_DAYS, completedOn, splitArchived } from "../lib/archive";
 import { percentOf, pieShapes } from "../lib/pie";
@@ -55,7 +56,7 @@ function brandHero(): Safe {
   </h1>`;
 }
 
-function emptyMessage(me: Profile): string {
+export function emptyMessage(me: Profile): string {
   if (me.role === "user") {
     return "Você ainda não tem tarefas atribuídas. Quando um administrador atribuir uma tarefa ou subtarefa a você, ela aparecerá aqui.";
   }
@@ -64,7 +65,7 @@ function emptyMessage(me: Profile): string {
     : "Nenhuma tarefa cadastrada ainda.";
 }
 
-function personName(id: string | null): string {
+export function personName(id: string | null): string {
   if (!id) {
     return "Sem responsável";
   }
@@ -72,7 +73,7 @@ function personName(id: string | null): string {
   return person ? person.name || person.email : "Usuário removido";
 }
 
-function period(start: string | null, end: string | null): string {
+export function period(start: string | null, end: string | null): string {
   if (!start && !end) {
     return "Sem datas";
   }
@@ -168,7 +169,7 @@ export function pendingView(): Safe {
 // ---------- estrutura principal ----------
 
 function navTab(view: View, label: string): Safe {
-  const active = state.view === view;
+  const active = state.view === view || (state.view === "project" && state.projectBack === view);
   return html`<button
     class="tab"
     type="button"
@@ -180,13 +181,20 @@ function navTab(view: View, label: string): Safe {
   </button>`;
 }
 
+/** Selo de saúde do projeto (lib/control.ts). */
+export function healthBadge(health: Health, title = ""): Safe {
+  return html`<span class="badge health health-${health}" title="${title || HEALTH_LABEL[health]}"
+    ><i class="dot health-${health}" aria-hidden="true"></i>${HEALTH_LABEL[health]}</span
+  >`;
+}
+
 export function shellView(): Safe {
   const me = currentUser();
   return html`<div class="app">
     <header class="topbar">
       <h1 class="brand"><img src="${logoSmall}" alt="Tarefas COMSOC" width="44" height="44" /></h1>
       <nav class="tabs" aria-label="Seções">
-        ${navTab("tasks", "Tarefas")} ${navTab("gantt", "Gantt")}
+        ${navTab("dashboard", "Painel")} ${navTab("tasks", "Tarefas")} ${navTab("gantt", "Gantt")}
         ${canSeeReports(me) && navTab("reports", "Relatório")}
         ${canManageUsers(me) && navTab("users", "Usuários")}
       </nav>
@@ -205,7 +213,7 @@ export function shellView(): Safe {
 }
 
 /** `total` (opcional): mostra ao lado do número quanto ele representa do total. */
-function card(label: string, value: number, tone = "", total?: number): Safe {
+export function card(label: string, value: number, tone = "", total?: number): Safe {
   const pct =
     total !== undefined && html`<small class="stat-pct">${percentOf(value, total)}%</small>`;
   return html`<div class="stat ${tone}">
@@ -213,7 +221,7 @@ function card(label: string, value: number, tone = "", total?: number): Safe {
   </div>`;
 }
 
-function opt(value: string, label: string, current: string): Safe {
+export function opt(value: string, label: string, current: string): Safe {
   return html`<option value="${value}" ${value === current && raw("selected")}>${label}</option>`;
 }
 
@@ -295,6 +303,12 @@ export function toolbarView(mode: "tasks" | "gantt" = "tasks"): Safe {
         </select>
       </label>
       <label class="field"
+        >Saúde
+        <select data-filter="health">
+          ${opt("all", "Todas", f.health)} ${HEALTHS.map((h) => opt(h, HEALTH_LABEL[h], f.health))}
+        </select>
+      </label>
+      <label class="field"
         >De
         <input type="date" data-filter="from" value="${f.from}" />
       </label>
@@ -336,6 +350,7 @@ function activeFilterCount(f: typeof state.filters, withHideDone: boolean): numb
     f.status !== "all",
     f.assignee !== "all",
     f.priority !== "all",
+    f.health !== "all",
     f.from !== "",
     f.to !== "",
     withHideDone && f.hideDone,
@@ -349,7 +364,7 @@ function activeFilterCount(f: typeof state.filters, withHideDone: boolean): numb
 
 // ---------- lista de tarefas ----------
 
-function progressBar(percent: number): Safe {
+export function progressBar(percent: number): Safe {
   return html`<div
     class="progress"
     role="progressbar"
@@ -361,7 +376,7 @@ function progressBar(percent: number): Safe {
   </div>`;
 }
 
-function subtaskRow(me: Profile, task: Task, subtask: Subtask): Safe {
+export function subtaskRow(me: Profile, task: Task, subtask: Subtask): Safe {
   const canToggle = canToggleSubtask(me, task, subtask);
   const canRemove = canManageSubtasks(me, task);
   const dates = resolveSubtaskDates(subtask, task.subtasks);
@@ -428,7 +443,7 @@ function subtaskRow(me: Profile, task: Task, subtask: Subtask): Safe {
   </li>`;
 }
 
-function linkChip(link: TaskLink, removable: boolean): Safe {
+export function linkChip(link: TaskLink, removable: boolean): Safe {
   const label = link.title || hostLabel(link.url);
   return html`<span class="link-chip">
     ${
@@ -455,7 +470,7 @@ function linkChip(link: TaskLink, removable: boolean): Safe {
 }
 
 /** Interruptor "Encolher tudo / Expandir tudo" das abas Tarefas e Relatório. */
-function expandSwitch(action: string, allOpen: boolean, label: string): Safe {
+export function expandSwitch(action: string, allOpen: boolean, label: string): Safe {
   return html`<div class="switch-row">
     <span class="${!allOpen && "on"}">Encolher tudo</span>
     <button
@@ -473,7 +488,7 @@ function expandSwitch(action: string, allOpen: boolean, label: string): Safe {
 }
 
 /** Título clicável de um card encolhível. */
-function cardTitle(
+export function cardTitle(
   action: string,
   id: string,
   expanded: boolean,
@@ -494,7 +509,7 @@ function cardTitle(
 }
 
 /** "Faltam 3 dias" / "Atrasada há 2 dias" / "HOJE", com a cor da urgência. */
-function countdownChip(deadline: Deadline): Safe | false {
+export function countdownChip(deadline: Deadline): Safe | false {
   const text = deadlineCountdown(deadline);
   if (text === null) {
     return false;
@@ -536,6 +551,9 @@ function taskCard(me: Profile, task: Task): Safe {
         </div>
       </div>
       <div class="card-actions">
+        <button class="btn small" type="button" data-action="open-project" data-id="${task.id}">
+          Abrir projeto
+        </button>
         ${
           state.extras &&
           html`<button
@@ -792,16 +810,16 @@ export function ganttView(): Safe {
   const rows = items.map((item) => {
     const bar = barGeometry(range, item, px);
     const task = tasksById.get(item.kind === "task" ? item.id : (item.parentId ?? ""));
-    const clickable = task
-      ? item.kind === "task"
-        ? canEditTask(me, task)
-        : canManageSubtasks(me, task)
-      : false;
-    const action = item.kind === "task" ? "edit-task" : "edit-sub";
+    // A tarefa abre a página do projeto (todos os perfis); a subtarefa, a edição (administrador).
+    const clickable = task ? item.kind === "task" || canManageSubtasks(me, task) : false;
+    const action = item.kind === "task" ? "open-project" : "edit-sub";
+    const health = item.kind === "task" && task ? computeControl(task, today).health : null;
     const detail = item.inherited
       ? "Subtarefa · sem datas próprias (usa as da tarefa)"
       : `${item.kind === "task" ? personName(task?.assignee_id ?? null) : "Subtarefa"} · ${formatBR(item.start)} – ${formatBR(item.end)}`;
-    const label = html`<span class="g-title">${item.title}</span>
+    const label = html`<span class="g-title"
+        >${health && html`<i class="dot health-${health}" title="${HEALTH_LABEL[health]}"></i> `}${item.title}</span
+      >
       <span class="g-sub">${detail}</span>`;
     const tone = item.overdue ? "late" : `st-${item.status}`;
     return html`<div class="g-row ${item.kind === "subtask" && "is-sub"}">
@@ -985,7 +1003,11 @@ export function confirmDialog(options: ConfirmOptions): Safe {
   </form>`;
 }
 
-function selectOptions<T extends string>(values: T[], labels: Record<T, string>, current: T): Safe {
+export function selectOptions<T extends string>(
+  values: T[],
+  labels: Record<T, string>,
+  current: T,
+): Safe {
   return html`${values.map(
     (v) => html`<option value="${v}" ${v === current && raw("selected")}>${labels[v]}</option>`,
   )}`;
@@ -1042,6 +1064,7 @@ export function taskDialog(task: Task | null): Safe {
       </label>
     </div>
     <label>Responsável ${assigneeSelect(task?.assignee_id ?? null, editableAssignee)} </label>
+    ${state.project && projectFields(task)}
     ${
       task &&
       task.subtasks.length > 0 &&
@@ -1056,6 +1079,54 @@ export function taskDialog(task: Task | null): Safe {
       <button class="btn primary" type="submit">Salvar</button>
     </div>
   </form>`;
+}
+
+/** Campos de projeto do formulário da tarefa (migração 008). */
+function projectFields(task: Task | null): Safe {
+  const hasBaseline = Boolean(task?.baseline_end || task?.baseline_start);
+  return html`<fieldset class="fieldset">
+    <legend>Projeto</legend>
+    <label
+      >Escopo e entregáveis
+      <textarea
+        name="scope"
+        rows="3"
+        maxlength="5000"
+        placeholder="Objetivo, o que será entregue e o que fica de fora"
+      >${task?.scope ?? ""}</textarea>
+    </label>
+    <label
+      >Critérios de aceite
+      <textarea
+        name="success_criteria"
+        rows="2"
+        maxlength="5000"
+        placeholder="Como saber que o projeto foi bem-sucedido"
+      >${task?.success_criteria ?? ""}</textarea>
+    </label>
+    <label
+      >Orçamento previsto (R$)
+      <input
+        name="budget"
+        type="number"
+        min="0"
+        step="0.01"
+        inputmode="decimal"
+        value="${task?.budget ?? ""}"
+        placeholder="Sem orçamento"
+      />
+    </label>
+    ${
+      hasBaseline &&
+      html`<label class="check">
+        <input type="checkbox" name="reset_baseline" /> Redefinir a linha de base com as datas acima
+      </label>
+      <p class="muted small">
+        Linha de base atual: ${period(task?.baseline_start ?? null, task?.baseline_end ?? null)}. Ela
+        guarda o prazo original para medir adiamentos.
+      </p>`
+    }
+  </fieldset>`;
 }
 
 export function subtaskDialog(task: Task, subtask: Subtask): Safe {

@@ -1,9 +1,17 @@
+import { HEALTHS, SORT_KEYS, type SortKey } from "./lib/control";
 import { DEFAULT_FILTERS, type Filters } from "./lib/filters";
+import type { JournalFilter } from "./lib/journal";
 import type { Zoom } from "./lib/gantt";
 import { emptyReadState, type ReadState } from "./lib/unread";
-import type { Comment, Profile, Task } from "./types";
+import type { Comment, JournalEntry, Profile, Task } from "./types";
 
-export type View = "tasks" | "gantt" | "reports" | "users";
+/** "project" é a página de um projeto (não aparece no menu). */
+export type View = "dashboard" | "tasks" | "gantt" | "reports" | "users" | "project";
+/** Abas do menu (o que pode ser lembrado entre visitas). */
+export type NavView = Exclude<View, "project">;
+export type DashLayout = "cards" | "list";
+/** Painel: só o que está em andamento ou tudo (inclusive concluídos e arquivados). */
+export type DashScope = "open" | "all";
 export type Screen = "loading" | "setup" | "login" | "pending" | "main";
 
 export interface State {
@@ -15,7 +23,18 @@ export interface State {
   tasks: Task[];
   /** Comentários e links disponíveis (migração 002 aplicada no banco). */
   extras: boolean;
+  /** Gestão de projeto disponível (migração 008: escopo, orçamento, diário de bordo). */
+  project: boolean;
   view: View;
+  /** Projeto aberto na página de projeto e a aba para onde "Voltar" leva. */
+  projectId: string | null;
+  projectBack: NavView;
+  /** Diário de bordo do projeto aberto. */
+  journal: JournalEntry[];
+  journalFilter: JournalFilter;
+  dashLayout: DashLayout;
+  dashSort: SortKey;
+  dashScope: DashScope;
   filters: Filters;
   zoom: Zoom;
   showSubtasks: boolean;
@@ -46,7 +65,15 @@ export const state: State = {
   profiles: [],
   tasks: [],
   extras: true,
-  view: "tasks",
+  project: true,
+  view: "dashboard",
+  projectId: null,
+  projectBack: "dashboard",
+  journal: [],
+  journalFilter: "all",
+  dashLayout: "cards",
+  dashSort: "deadline",
+  dashScope: "open",
   filters: { ...DEFAULT_FILTERS },
   zoom: "week",
   showSubtasks: true,
@@ -69,7 +96,7 @@ export function currentUser(): Profile {
 }
 
 const PREFS_KEY = "tarefas-comsoc:prefs";
-const VIEWS: View[] = ["tasks", "gantt", "reports", "users"];
+const VIEWS: NavView[] = ["dashboard", "tasks", "gantt", "reports", "users"];
 const ZOOMS: Zoom[] = ["day", "week", "month"];
 
 const readKey = (userId: string): string => `tarefas-comsoc:read:${userId}`;
@@ -119,6 +146,18 @@ export function loadPrefs(): void {
     if (typeof view === "string" && (VIEWS as string[]).includes(view)) {
       state.view = view as View;
     }
+    const layout = prefs["dashLayout"];
+    if (layout === "cards" || layout === "list") {
+      state.dashLayout = layout;
+    }
+    const sort = prefs["dashSort"];
+    if (typeof sort === "string" && (SORT_KEYS as string[]).includes(sort)) {
+      state.dashSort = sort as SortKey;
+    }
+    const scope = prefs["dashScope"];
+    if (scope === "open" || scope === "all") {
+      state.dashScope = scope;
+    }
     const zoom = prefs["zoom"];
     if (typeof zoom === "string" && (ZOOMS as string[]).includes(zoom)) {
       state.zoom = zoom as Zoom;
@@ -136,6 +175,9 @@ export function loadPrefs(): void {
           (next as unknown as Record<string, unknown>)[key] = value;
         }
       }
+      if (next.health !== "all" && !(HEALTHS as string[]).includes(next.health)) {
+        next.health = "all";
+      }
       state.filters = next;
     }
   } catch {
@@ -148,7 +190,10 @@ export function savePrefs(): void {
     localStorage.setItem(
       PREFS_KEY,
       JSON.stringify({
-        view: state.view,
+        view: state.view === "project" ? state.projectBack : state.view,
+        dashLayout: state.dashLayout,
+        dashSort: state.dashSort,
+        dashScope: state.dashScope,
         zoom: state.zoom,
         showSubtasks: state.showSubtasks,
         filters: state.filters,

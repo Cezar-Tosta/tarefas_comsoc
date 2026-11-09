@@ -1,6 +1,9 @@
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
 import type {
   Comment,
+  Expense,
+  JournalEntry,
+  JournalKind,
   Profile,
   Role,
   Subtask,
@@ -85,31 +88,58 @@ export async function fetchProfiles(): Promise<Profile[]> {
   return (data ?? []) as Profile[];
 }
 
-/** `extras` é false quando a migração 002 (comentários e links) ainda não foi executada. */
-export async function fetchTasks(): Promise<{ tasks: Task[]; extras: boolean }> {
-  const full = await db().from("tasks").select("*, subtasks(*), task_links(*), comments(count)");
-  let extras = true;
-  let data: unknown[] | null = full.data;
-  if (full.error) {
-    if (full.error.code !== "PGRST200") {
-      throw new Error(full.error.message);
+/**
+ * `extras` é false quando a migração 002 (comentários e links) ainda não foi executada;
+ * `project` é false sem a 008 (escopo, orçamento, despesas e diário de bordo).
+ * Tenta da consulta mais completa para a mais simples.
+ */
+export async function fetchTasks(): Promise<{ tasks: Task[]; extras: boolean; project: boolean }> {
+  const attempts = [
+    {
+      select: "*, subtasks(*), task_links(*), comments(count), task_expenses(*)",
+      extras: true,
+      project: true,
+    },
+    { select: "*, subtasks(*), task_links(*), comments(count)", extras: true, project: false },
+    { select: "*, subtasks(*)", extras: false, project: false },
+  ];
+  let data: unknown[] | null = null;
+  let extras = false;
+  let project = false;
+  for (const [index, attempt] of attempts.entries()) {
+    const result = await db().from("tasks").select(attempt.select);
+    if (!result.error) {
+      data = result.data;
+      extras = attempt.extras;
+      project = attempt.project;
+      break;
     }
-    extras = false;
-    const base = await db().from("tasks").select("*, subtasks(*)");
-    check(base.error);
-    data = base.data;
+    // PGRST200: relação inexistente (migração ainda não aplicada) → tenta a próxima
+    if (result.error.code !== "PGRST200" || index === attempts.length - 1) {
+      throw new Error(result.error.message);
+    }
   }
-  const rows = (data ?? []) as (Omit<Task, "links" | "comment_count"> & {
+  const rows = (data ?? []) as (Omit<Task, "links" | "comment_count" | "expenses"> & {
     task_links?: TaskLink[];
     comments?: { count: number }[];
+    task_expenses?: Expense[];
   })[];
   const tasks: Task[] = [];
-  for (const { task_links = [], comments = [], ...rest } of rows) {
-    tasks.push({
+  for (const { task_links = [], comments = [], task_expenses, ...rest } of rows) {
+    const task: Task = {
       ...rest,
       links: task_links.toSorted((x, y) => x.created_at.localeCompare(y.created_at)),
       comment_count: comments[0]?.count ?? 0,
-    });
+    };
+    if (task_expenses) {
+      task.expenses = task_expenses
+        .map((e) => ({ ...e, amount: Number(e.amount) }))
+        .toSorted((x, y) => x.spent_on.localeCompare(y.spent_on));
+    }
+    if (task.budget !== undefined && task.budget !== null) {
+      task.budget = Number(task.budget);
+    }
+    tasks.push(task);
   }
   for (const task of tasks) {
     task.subtasks.sort((x, y) => x.position - y.position);
@@ -118,7 +148,7 @@ export async function fetchTasks(): Promise<{ tasks: Task[]; extras: boolean }> 
     const byStart = (x.start_date ?? "9999-12-31").localeCompare(y.start_date ?? "9999-12-31");
     return byStart === 0 ? x.title.localeCompare(y.title, "pt-BR") : byStart;
   });
-  return { tasks, extras };
+  return { tasks, extras, project };
 }
 
 // ---------- escrita ----------
@@ -215,5 +245,42 @@ export async function addLink(taskId: string, href: string, title: string): Prom
 
 export async function deleteLink(id: string): Promise<void> {
   const { data, error } = await db().from("task_links").delete().eq("id", id).select("id");
+  checkAffected(data, error);
+}
+
+// ---------- projeto: despesas e diário de bordo (migração 008) ----------
+
+export async function addExpense(
+  taskId: string,
+  input: { description: string; amount: number; spent_on: string },
+): Promise<void> {
+  const { error } = await db()
+    .from("task_expenses")
+    .insert({ ...input, task_id: taskId });
+  check(error);
+}
+
+export async function deleteExpense(id: string): Promise<void> {
+  const { data, error } = await db().from("task_expenses").delete().eq("id", id).select("id");
+  checkAffected(data, error);
+}
+
+export async function fetchJournal(taskId: string): Promise<JournalEntry[]> {
+  const { data, error } = await db()
+    .from("task_journal")
+    .select("*")
+    .eq("task_id", taskId)
+    .order("created_at", { ascending: false });
+  check(error);
+  return (data ?? []) as JournalEntry[];
+}
+
+export async function addJournal(taskId: string, kind: JournalKind, body: string): Promise<void> {
+  const { error } = await db().from("task_journal").insert({ task_id: taskId, kind, body });
+  check(error);
+}
+
+export async function deleteJournal(id: string): Promise<void> {
+  const { data, error } = await db().from("task_journal").delete().eq("id", id).select("id");
   checkAffected(data, error);
 }

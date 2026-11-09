@@ -1,4 +1,5 @@
 import type { Priority, Status, Task } from "../types";
+import { computeControl, type Health } from "./control";
 import { effectiveStatus, isOverdue } from "./progress";
 
 export interface Filters {
@@ -9,6 +10,8 @@ export interface Filters {
   from: string; // "" = sem limite
   to: string;
   hideDone: boolean;
+  /** Saúde do projeto (veja lib/control.ts). */
+  health: Health | "all";
 }
 
 export const DEFAULT_FILTERS: Filters = {
@@ -19,6 +22,7 @@ export const DEFAULT_FILTERS: Filters = {
   from: "",
   to: "",
   hideDone: false,
+  health: "all",
 };
 
 function normalize(text: string): string {
@@ -29,7 +33,7 @@ function matchesText(task: Task, needle: string): boolean {
   if (!needle) {
     return true;
   }
-  const haystacks = [task.title, task.description];
+  const haystacks = [task.title, task.description, task.scope ?? "", task.success_criteria ?? ""];
   for (const subtask of task.subtasks) {
     haystacks.push(subtask.title);
   }
@@ -99,6 +103,9 @@ export function filterTasks(tasks: Task[], filters: Filters, today: string): Tas
       continue;
     }
     if (!matchesPeriod(task, filters.from, filters.to)) {
+      continue;
+    }
+    if (filters.health !== "all" && computeControl(task, today).health !== filters.health) {
       continue;
     }
     if (!matchesText(task, needle)) {

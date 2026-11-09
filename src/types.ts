@@ -38,6 +38,35 @@ export interface Comment {
   created_at: string;
 }
 
+export interface Expense {
+  id: string;
+  task_id: string;
+  description: string;
+  amount: number;
+  /** Data do gasto (AAAA-MM-DD). */
+  spent_on: string;
+  created_at: string;
+}
+
+/** Tipos de registro do diário de bordo; "system" é gerado pelo banco (gatilhos). */
+export type JournalKind =
+  | "note"
+  | "progress"
+  | "decision"
+  | "risk"
+  | "issue"
+  | "milestone"
+  | "system";
+
+export interface JournalEntry {
+  id: string;
+  task_id: string;
+  author_id: string | null;
+  kind: JournalKind;
+  body: string;
+  created_at: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -52,7 +81,21 @@ export interface Task {
   comment_count: number;
   /** Quando foi concluída (calculado pelo banco; ausente sem a migração 007). */
   completed_at?: string | null;
+  // ---- gestão de projeto (migração 008; ausentes sem ela) ----
+  /** Escopo: objetivo, entregáveis e o que fica de fora. */
+  scope?: string;
+  /** Critérios de aceite: como saber que o projeto terminou bem. */
+  success_criteria?: string;
+  /** Orçamento previsto (R$). */
+  budget?: number | null;
+  /** Linha de base: datas originalmente planejadas (o banco grava na primeira definição). */
+  baseline_start?: string | null;
+  baseline_end?: string | null;
+  expenses?: Expense[];
 }
 
-export type TaskInput = Omit<Task, "id" | "subtasks" | "links" | "comment_count" | "completed_at">;
+export type TaskInput = Omit<
+  Task,
+  "id" | "subtasks" | "links" | "comment_count" | "completed_at" | "expenses"
+>;
 export type SubtaskInput = Omit<Subtask, "id" | "position">;

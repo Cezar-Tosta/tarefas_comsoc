@@ -132,4 +132,17 @@ describe("filterTasks", () => {
       "infra",
     ]);
   });
+
+  it("filters by project health", () => {
+    const late = task("atrasado", { status: "doing", end_date: "2026-09-01" });
+    const fine = task("em dia", { status: "doing", end_date: "2026-12-01" });
+    const list = [late, fine];
+    expect(ids(filterTasks(list, f({ health: "critical" }), today))).toEqual(["atrasado"]);
+    expect(ids(filterTasks(list, f({ health: "ok" }), today))).toEqual(["em dia"]);
+  });
+
+  it("searches the project scope too", () => {
+    const scoped = task("escopo", { scope: "Entregar o novo portal" });
+    expect(ids(filterTasks([scoped], f({ q: "portal" }), today))).toEqual(["escopo"]);
+  });
 });
