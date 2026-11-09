@@ -10,13 +10,21 @@ import { normalizeUrl } from "./lib/links";
 import { markMine, markSeen, reconcile } from "./lib/unread";
 import { wouldCreateCycle } from "./lib/subtaskDates";
 import { canManageUsers, canSeeReports, visibleTasks } from "./lib/permissions";
-import { currentUser, loadRead, saveRead, savePrefs, state, type View } from "./state";
+import {
+  currentUser,
+  type DashScope,
+  loadRead,
+  saveRead,
+  savePrefs,
+  state,
+  type View,
+} from "./state";
+import { activitiesView } from "./ui/activities";
 import { dashboardView, projectView } from "./ui/project";
 import type { JournalKind, Priority, Role, Status, TaskInput } from "./types";
 import { html, mount, type Safe } from "./ui/html";
 import {
   chatMessages,
-  currentTaskList,
   commentsDialog,
   accountDialog,
   confirmDialog,
@@ -33,7 +41,7 @@ import {
   subtaskDialog,
   summaryView,
   taskDialog,
-  tasksView,
+  unreadBanner,
   toolbarView,
   userDialog,
   usersView,
@@ -128,7 +136,8 @@ export function render(): void {
 
 /** Atualiza resumo e conteúdo sem recriar a barra de filtros (preserva foco ao digitar). */
 function renderContent(): void {
-  mount(byId("alerts"), pendingBanner());
+  const withUnread = state.view === "dashboard" || state.view === "tasks";
+  mount(byId("alerts"), html`${pendingBanner()}${withUnread && unreadBanner()}`);
   mount(byId("summary"), state.view === "reports" ? summaryView(todayISO()) : html``);
   let content: Safe;
   if (state.view === "gantt") {
@@ -142,7 +151,7 @@ function renderContent(): void {
   } else if (state.view === "project") {
     content = projectView();
   } else {
-    content = tasksView();
+    content = activitiesView();
   }
   mount(byId("content"), content);
   if (state.view === "gantt") {
@@ -239,6 +248,8 @@ export async function boot(): Promise<void> {
     if (state.view === "reports" && !canSeeReports(profile)) {
       state.view = "tasks";
     }
+    // Atividades: o usuário começa pelas dele; administrador e visualizador, pelas de todos.
+    state.activityScope = profile.role === "user" ? "mine" : "all";
     if (profile.role === "user") {
       // o usuário já vê o próprio relatório e o detalhamento abertos
       state.openPeople.add(profile.id);
@@ -499,19 +510,6 @@ const actions: Record<string, Handler> = {
 
   "new-task": () => openDialog(taskDialog(null)),
 
-  "toggle-task": (el) => {
-    const id = el.dataset["id"];
-    if (!id) {
-      return;
-    }
-    if (state.openTasks.has(id)) {
-      state.openTasks.delete(id);
-    } else {
-      state.openTasks.add(id);
-    }
-    renderContent();
-  },
-
   "toggle-person": (el) => {
     const id = el.dataset["id"];
     if (!id) {
@@ -535,24 +533,6 @@ const actions: Record<string, Handler> = {
         state.openPeople.add(id);
       }
     }
-    renderContent();
-  },
-
-  "toggle-all": () => {
-    const visible = currentTaskList();
-    const allOpen = visible.every((t) => state.openTasks.has(t.id));
-    for (const task of visible) {
-      if (allOpen) {
-        state.openTasks.delete(task.id);
-      } else {
-        state.openTasks.add(task.id);
-      }
-    }
-    renderContent();
-  },
-
-  "set-list": (el) => {
-    state.taskList = el.dataset["list"] === "archived" ? "archived" : "active";
     renderContent();
   },
 
@@ -786,8 +766,17 @@ const actions: Record<string, Handler> = {
     renderContent();
   },
 
+  "set-activity-scope": (el) => {
+    state.activityScope = el.dataset["scope"] === "mine" ? "mine" : "all";
+    renderContent();
+  },
+
   "set-scope": (el) => {
-    state.dashScope = el.dataset["scope"] === "all" ? "all" : "open";
+    state.dashScope = pick<DashScope>(
+      ["open", "all", "archived"],
+      el.dataset["scope"] ?? "",
+      "open",
+    );
     savePrefs();
     renderContent();
   },

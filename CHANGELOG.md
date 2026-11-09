@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 — Painel e Atividades separados
+
+- A aba **Tarefas** virou **Atividades**: uma lista do que precisa ser feito, agrupada por
+  prazo, com conclusão em um clique e o filtro "Minhas / Todas". Ela não repete mais os cards
+  de projeto do Painel.
+- O **Painel** passou a ter a lista de **Arquivados** e o selo de comentários novos.
+- O aviso de comentários novos aparece no topo do Painel e das Atividades.
+- Troca de senha em "Minha conta" (clique no seu nome no topo).
+- Cadastros pendentes ganharam contador na aba Usuários, aviso em todas as abas e
+  aprovação em um clique. A lista de usuários se atualiza sozinha.
+
 ## 0.2.0 — Gestão de projetos
 
 - Cada tarefa vira um projeto, com escopo e entregáveis, critérios de aceite, orçamento e

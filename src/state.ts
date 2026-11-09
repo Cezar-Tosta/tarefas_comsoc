@@ -11,7 +11,9 @@ export type View = "dashboard" | "tasks" | "gantt" | "reports" | "users" | "proj
 export type NavView = Exclude<View, "project">;
 export type DashLayout = "cards" | "list";
 /** Painel: só o que está em andamento ou tudo (inclusive concluídos e arquivados). */
-export type DashScope = "open" | "all";
+export type DashScope = "open" | "all" | "archived";
+/** Atividades: só as da pessoa ou as de todos. */
+export type ActivityScope = "mine" | "all";
 export type Screen = "loading" | "setup" | "login" | "pending" | "main";
 
 export interface State {
@@ -45,12 +47,9 @@ export interface State {
   comments: Comment[];
   /** Tarefas cujo grupo "Concluídas" está aberto. */
   openDone: Set<string>;
-  /** Lista exibida na aba Tarefas: ativas ou arquivadas (concluídas há 10 dias ou mais). */
-  taskList: "active" | "archived";
+  activityScope: ActivityScope;
   /** Comentários já vistos (por navegador e usuário). */
   read: ReadState;
-  /** Tarefas expandidas na aba Tarefas (por padrão todas aparecem encolhidas). */
-  openTasks: Set<string>;
   /** Relatórios (por pessoa) expandidos na aba Relatório (por padrão todos encolhidos). */
   openPeople: Set<string>;
   /** Relatórios (por pessoa) com o detalhamento aberto. */
@@ -81,9 +80,8 @@ export const state: State = {
   chatTaskId: null,
   comments: [],
   openDone: new Set(),
-  taskList: "active",
+  activityScope: "all",
   read: emptyReadState(),
-  openTasks: new Set(),
   openPeople: new Set(),
   openReports: new Set(),
 };
@@ -155,7 +153,7 @@ export function loadPrefs(): void {
       state.dashSort = sort as SortKey;
     }
     const scope = prefs["dashScope"];
-    if (scope === "open" || scope === "all") {
+    if (scope === "open" || scope === "all" || scope === "archived") {
       state.dashScope = scope;
     }
     const zoom = prefs["zoom"];

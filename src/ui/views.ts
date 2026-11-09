@@ -6,16 +6,14 @@ import { hostLabel, isHttpUrl } from "../lib/links";
 import { filterTasks } from "../lib/filters";
 import { computeControl, HEALTH_LABEL, HEALTHS, type Health } from "../lib/control";
 import { computeMetrics, metricsScope } from "../lib/metrics";
-import { ARCHIVE_AFTER_DAYS, completedOn, splitArchived } from "../lib/archive";
 import { percentOf, pieShapes } from "../lib/pie";
-import { participates, unreadCount, unreadTasks } from "../lib/unread";
+import { unreadTasks } from "../lib/unread";
 import { resolveSubtaskDates, wouldCreateCycle } from "../lib/subtaskDates";
 import {
   buildPersonReport,
   buildTeamReport,
   type Deadline,
   deadlineCountdown,
-  deadlineInfo,
   deadlineLabel,
   type NestedLine,
   nestLines,
@@ -31,19 +29,14 @@ import {
 } from "../lib/gantt";
 import {
   canAssign,
-  canCompleteTask,
   canComment,
   canCreateTask,
   canDeleteComment,
-  canDeleteTask,
-  canEditTask,
-  canManageLinks,
   canManageSubtasks,
   canManageUsers,
   canSeeReports,
   canToggleSubtask,
 } from "../lib/permissions";
-import { effectiveStatus, isOverdue, splitSubtasks, taskProgress } from "../lib/progress";
 import { currentUser, state, type View } from "../state";
 import type { Comment, Profile, Subtask, Task, TaskLink } from "../types";
 import { html, raw, type Safe } from "./html";
@@ -61,7 +54,7 @@ export function emptyMessage(me: Profile): string {
     return "Você ainda não tem tarefas atribuídas. Quando um administrador atribuir uma tarefa ou subtarefa a você, ela aparecerá aqui.";
   }
   return canCreateTask(me)
-    ? "Nenhuma tarefa cadastrada ainda. Na aba Tarefas, use “+ Nova tarefa” para começar."
+    ? "Nenhum projeto cadastrado ainda. Use “+ Nova tarefa” no Painel para começar."
     : "Nenhuma tarefa cadastrada ainda.";
 }
 
@@ -199,7 +192,7 @@ export function shellView(): Safe {
     <header class="topbar">
       <h1 class="brand"><img src="${logoSmall}" alt="Tarefas COMSOC" width="44" height="44" /></h1>
       <nav class="tabs" aria-label="Seções">
-        ${navTab("dashboard", "Painel")} ${navTab("tasks", "Tarefas")} ${navTab("gantt", "Gantt")}
+        ${navTab("dashboard", "Painel")} ${navTab("tasks", "Atividades")} ${navTab("gantt", "Gantt")}
         ${canSeeReports(me) && navTab("reports", "Relatório")}
         ${canManageUsers(me) && navTab("users", "Usuários", pendingPill())}
       </nav>
@@ -561,159 +554,9 @@ export function countdownChip(deadline: Deadline): Safe | false {
   return html`<span class="deadline dl-${tone}">${text}</span>`;
 }
 
-function taskCard(me: Profile, task: Task): Safe {
-  const status = effectiveStatus(task);
-  const percent = taskProgress(task);
-  const late = isOverdue(task, todayISO());
-  const { open, done } = splitSubtasks(task.subtasks);
-  const showDoneGroup = done.length > 0 && !state.filters.hideDone;
-  const canEdit = canEditTask(me, task);
-  const canAddSub = canManageSubtasks(me, task);
-  const expanded = state.openTasks.has(task.id);
-  const chip = countdownChip(deadlineInfo(task.end_date, status === "done", todayISO()));
-  const fresh = participates(me, state.read, task) ? unreadCount(state.read, task) : 0;
-  const finished = state.taskList === "archived" ? completedOn(task) : null;
-  const extra = html`${fresh > 0 && html`<span class="badge new-badge">${fresh} ${fresh === 1 ? "novo" : "novos"}</span>`}${chip}${finished !== null && html`<span class="chip">Concluída em ${formatBR(finished)}</span>`}`;
-  const title = cardTitle("toggle-task", task.id, expanded, task.title, extra);
-  if (!expanded) {
-    return html`<article class="card is-collapsed status-${status} ${late && "is-late"}">
-      ${title}
-    </article>`;
-  }
-  return html`<article class="card status-${status} ${late && "is-late"}">
-    <header class="card-head">
-      <div class="card-title">
-        ${title}
-        <div class="badges">
-          <span class="badge st-${status}">${STATUS_LABEL[status]}</span>
-          <span class="badge pr-${task.priority}"
-            >Prioridade ${PRIORITY_LABEL[task.priority].toLowerCase()}</span
-          >
-          ${late && html`<span class="badge late">Atrasada</span>`}
-        </div>
-      </div>
-      <div class="card-actions">
-        <button class="btn small" type="button" data-action="open-project" data-id="${task.id}">
-          Abrir projeto
-        </button>
-        ${
-          state.extras &&
-          html`<button
-            class="btn small"
-            type="button"
-            data-action="open-comments"
-            data-id="${task.id}"
-          >
-            Comentários${
-              task.comment_count > 0 &&
-              html` <span class="count-pill ${fresh > 0 && "new"}">${task.comment_count}</span>`
-            }
-          </button>`
-        }
-        ${
-          canCompleteTask(me, task) &&
-          html`<button
-            class="btn small primary"
-            type="button"
-            data-action="complete-task"
-            data-id="${task.id}"
-          >
-            Concluir
-          </button>`
-        }
-        ${
-          canEdit &&
-          html`<button class="btn small" type="button" data-action="edit-task" data-id="${task.id}">
-            Editar
-          </button>`
-        }
-        ${
-          canDeleteTask(me) &&
-          html`<button
-            class="btn small danger"
-            type="button"
-            data-action="delete-task"
-            data-id="${task.id}"
-          >
-            Excluir
-          </button>`
-        }
-      </div>
-    </header>
-    ${task.description && html`<p class="desc">${linkify(task.description)}</p>`}
-    ${
-      state.extras &&
-      (task.links.length > 0 || canManageLinks(me, task)) &&
-      html`<div class="links">
-        ${task.links.map((link) => linkChip(link, canManageLinks(me, task)))}
-        ${
-          canManageLinks(me, task) &&
-          html`<button class="chip-btn" type="button" data-action="add-link" data-id="${task.id}">
-            + Link
-          </button>`
-        }
-      </div>`
-    }
-    <dl class="meta">
-      <div>
-        <dt>Responsável</dt>
-        <dd>${personName(task.assignee_id)}</dd>
-      </div>
-      <div>
-        <dt>Período</dt>
-        <dd>${period(task.start_date, task.end_date)}</dd>
-      </div>
-    </dl>
-    <div class="progress-row">
-      ${progressBar(percent)}
-      <span class="progress-label">
-        <strong>${percent}%</strong>
-        ${task.subtasks.length > 0 && html` · ${done.length}/${task.subtasks.length} subtarefas`}
-      </span>
-    </div>
-    ${
-      open.length > 0 &&
-      html`<ul class="subs">
-        ${open.map((s) => subtaskRow(me, task, s))}
-      </ul>`
-    }
-    ${
-      canAddSub &&
-      html`<form class="inline-add" data-form="add-sub" data-task="${task.id}">
-        <input
-          name="title"
-          required
-          maxlength="200"
-          placeholder="Nova subtarefa…"
-          aria-label="Nova subtarefa"
-        />
-        <button class="btn small" type="submit">Adicionar</button>
-      </form>`
-    }
-    ${
-      showDoneGroup &&
-      html`<details
-        class="done-group"
-        data-task="${task.id}"
-        ${state.openDone.has(task.id) && raw("open")}
-      >
-        <summary>Concluídas (${done.length})</summary>
-        <ul class="subs">
-          ${done.map((s) => subtaskRow(me, task, s))}
-        </ul>
-      </details>`
-    }
-  </article>`;
-}
-
-/** Tarefas da lista aberta na aba Tarefas (ativas ou arquivadas), já com os filtros. */
-export function currentTaskList(today = todayISO()): Task[] {
-  const { active, archived } = splitArchived(state.tasks, today);
-  return filterTasks(state.taskList === "archived" ? archived : active, state.filters, today);
-}
-
-/** Aviso no topo: comentários novos nas tarefas em que a pessoa participa. */
-function unreadBanner(me: Profile): Safe {
+/** Aviso no topo: comentários novos nos projetos em que a pessoa participa. */
+export function unreadBanner(): Safe {
+  const me = currentUser();
   if (!state.extras) {
     return html``;
   }
@@ -727,7 +570,7 @@ function unreadBanner(me: Profile): Safe {
   }
   return html`<div class="notice new-comments" role="status">
     <strong>${total} ${total === 1 ? "comentário novo" : "comentários novos"}</strong>
-    em ${items.length} ${items.length === 1 ? "tarefa" : "tarefas"}:
+    em ${items.length} ${items.length === 1 ? "projeto" : "projetos"}:
     ${items.map(
       ({ task, count }) =>
         html`<button
@@ -740,52 +583,6 @@ function unreadBanner(me: Profile): Safe {
         </button>`,
     )}
   </div>`;
-}
-
-export function tasksView(): Safe {
-  const me = currentUser();
-  if (state.tasks.length === 0) {
-    return html`<p class="empty">${emptyMessage(me)}</p>`;
-  }
-  const today = todayISO();
-  const { active, archived } = splitArchived(state.tasks, today);
-  const isArchivedList = state.taskList === "archived";
-  const showing = isArchivedList ? archived : active;
-  const visible = filterTasks(showing, state.filters, today);
-  const allOpen = visible.length > 0 && visible.every((t) => state.openTasks.has(t.id));
-  const lists: { key: "active" | "archived"; label: string; count: number }[] = [
-    { key: "active", label: "Ativas", count: active.length },
-    { key: "archived", label: "Arquivados", count: archived.length },
-  ];
-  let empty = "Nenhuma tarefa corresponde aos filtros.";
-  if (showing.length === 0) {
-    empty = isArchivedList
-      ? `Nenhuma tarefa arquivada. Tarefas concluídas há ${ARCHIVE_AFTER_DAYS} dias ou mais aparecem aqui.`
-      : "Nenhuma tarefa ativa. As concluídas há mais tempo estão em Arquivados.";
-  }
-  return html`${unreadBanner(me)}
-    <div class="tasks-bar">
-      <div class="segmented" role="group" aria-label="Lista">
-        ${lists.map(
-          (l) =>
-            html`<button
-              type="button"
-              data-action="set-list"
-              data-list="${l.key}"
-              ${l.key === state.taskList && raw('aria-pressed="true"')}
-            >
-              ${l.label} (${l.count})
-            </button>`,
-        )}
-      </div>
-      <p class="count">${visible.length} de ${showing.length} tarefas</p>
-      ${visible.length > 0 && expandSwitch("toggle-all", allOpen, "Expandir todas as tarefas")}
-    </div>
-    ${
-      visible.length === 0
-        ? html`<p class="empty">${empty}</p>`
-        : html`<div class="cards">${visible.map((t) => taskCard(me, t))}</div>`
-    }`;
 }
 
 // ---------- Gantt ----------

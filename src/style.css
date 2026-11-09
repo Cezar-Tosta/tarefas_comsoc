@@ -3238,3 +3238,154 @@ button.who-name:hover {
     min-height: 40px;
   }
 }
+
+/* ---------- atividades ---------- */
+
+.act-intro {
+  margin: 0;
+}
+
+.act-groups {
+  display: grid;
+  gap: 14px;
+}
+
+.act-group {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--due, var(--line));
+  border-radius: var(--radius);
+  padding: 10px 14px 4px;
+  box-shadow: var(--shadow);
+}
+
+.due-overdue {
+  --due: var(--late);
+}
+
+.due-today {
+  --due: var(--h-attention);
+}
+
+.due-week {
+  --due: var(--st-doing);
+}
+
+.due-later {
+  --due: var(--st-todo);
+}
+
+.act-group-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--due, var(--muted));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.act-group-title .count-pill {
+  background: var(--due, var(--accent));
+  color: #ffffff;
+}
+
+.act-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.act {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.act:first-child {
+  border-top: 0;
+}
+
+.act-check {
+  display: flex;
+  justify-content: center;
+  min-width: 22px;
+}
+
+.act-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.act-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.act-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12px;
+}
+
+.act-project {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  text-align: left;
+}
+
+.act-project:hover {
+  text-decoration: underline;
+}
+
+.chip.muted {
+  opacity: 0.75;
+  font-style: italic;
+}
+
+@media (max-width: 720px) {
+  .act {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .act-due {
+    grid-column: 2;
+  }
+
+  .act-check {
+    min-width: 40px;
+    min-height: 40px;
+    align-items: center;
+  }
+
+  .act-project {
+    min-height: 32px;
+  }
+
+  .act-task .act-check .btn {
+    min-height: 36px;
+  }
+}
+
+@media (max-width: 720px) {
+  /* três opções lado a lado no celular: texto menor para caber numa linha */
+  .dash-bar > .segmented:first-child button {
+    padding: 8px 4px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+}

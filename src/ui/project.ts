@@ -2,7 +2,7 @@
 // indicadores de controle e diário de bordo.
 
 import { JOURNAL_LABEL, PRIORITY_LABEL, STATUS_LABEL } from "../labels";
-import { splitArchived } from "../lib/archive";
+import { ARCHIVE_AFTER_DAYS, completedOn, splitArchived } from "../lib/archive";
 import {
   computeControl,
   type Control,
@@ -57,9 +57,12 @@ import {
 
 /** Projetos exibidos no painel: escopo (em andamento / todos), filtros e ordenação. */
 export function dashboardTasks(today = todayISO()): Task[] {
-  let base = state.tasks;
+  const { active, archived } = splitArchived(state.tasks, today);
+  let base = active;
   if (state.dashScope === "open") {
-    base = splitArchived(state.tasks, today).active.filter((t) => effectiveStatus(t) !== "done");
+    base = active.filter((t) => effectiveStatus(t) !== "done");
+  } else if (state.dashScope === "archived") {
+    base = archived;
   }
   return sortTasks(filterTasks(base, state.filters, today), state.dashSort, today);
 }
@@ -78,6 +81,9 @@ function dashCard(task: Task, today: string): Safe {
   const chip = countdownChip(deadlineInfo(task.end_date, status === "done", today));
   const { done } = splitSubtasks(task.subtasks);
   const [reason] = control.reasons;
+  const me = currentUser();
+  const fresh = participates(me, state.read, task) ? unreadCount(state.read, task) : 0;
+  const finished = state.dashScope === "archived" ? completedOn(task) : null;
   return html`<article class="dash-card health-edge-${control.health}">
     <h3>
       <button class="dash-open" type="button" data-action="open-project" data-id="${task.id}">
@@ -85,6 +91,8 @@ function dashCard(task: Task, today: string): Safe {
       </button>
     </h3>
     <div class="badges">
+      ${fresh > 0 && html`<span class="badge new-badge">${fresh} ${fresh === 1 ? "novo" : "novos"}</span>`}
+      ${finished !== null && html`<span class="chip">Concluída em ${formatBR(finished)}</span>`}
       ${healthBadge(control.health, control.reasons.join(" · "))}
       <span class="badge st-${status}">${STATUS_LABEL[status]}</span>
       ${task.priority === "high" && html`<span class="badge pr-high">Prioridade alta</span>`}
@@ -164,6 +172,16 @@ function dashTable(tasks: Task[], today: string): Safe {
   </div>`;
 }
 
+function emptyDashboard(): string {
+  if (state.dashScope === "archived") {
+    return `Nenhum projeto arquivado. Projetos concluídos há ${ARCHIVE_AFTER_DAYS} dias ou mais aparecem aqui.`;
+  }
+  if (state.dashScope === "open") {
+    return "Nenhum projeto em andamento corresponde aos filtros. Veja “Todos” ou “Arquivados”.";
+  }
+  return "Nenhum projeto corresponde aos filtros.";
+}
+
 export function dashboardView(): Safe {
   const me = currentUser();
   if (state.tasks.length === 0) {
@@ -172,9 +190,8 @@ export function dashboardView(): Safe {
   const today = todayISO();
   const visible = dashboardTasks(today);
   const summary = portfolioSummary(visible, today);
-  const openCount = splitArchived(state.tasks, today).active.filter(
-    (t) => effectiveStatus(t) !== "done",
-  ).length;
+  const split = splitArchived(state.tasks, today);
+  const openCount = split.active.filter((t) => effectiveStatus(t) !== "done").length;
   let progressSum = 0;
   for (const task of visible) {
     progressSum += computeControl(task, today).progress;
@@ -183,7 +200,8 @@ export function dashboardView(): Safe {
   const used = summary.budget > 0 ? Math.round((summary.spent / summary.budget) * 100) : null;
   const scopes = [
     { key: "open", label: `Em andamento (${openCount})` },
-    { key: "all", label: `Todos (${state.tasks.length})` },
+    { key: "all", label: `Todos (${split.active.length})` },
+    { key: "archived", label: `Arquivados (${split.archived.length})` },
   ];
   const layouts = [
     { key: "cards", label: "Cards" },
@@ -249,7 +267,7 @@ export function dashboardView(): Safe {
     </div>
     ${
       visible.length === 0
-        ? html`<p class="empty">Nenhum projeto corresponde aos filtros.</p>`
+        ? html`<p class="empty">${emptyDashboard()}</p>`
         : state.dashLayout === "list"
           ? dashTable(visible, today)
           : html`<div class="dash-cards">${visible.map((t) => dashCard(t, today))}</div>`
@@ -447,7 +465,7 @@ function scheduleSection(me: Profile, task: Task, today: string): Safe {
           <dd>${personName(task.assignee_id)}</dd>
         </div>
       </dl>
-      ${timeline(task, today)}
+      ${me.role !== "user" && timeline(task, today)}
       <h4 class="sub-heading">Etapas (${done.length}/${task.subtasks.length})</h4>
       ${
         open.length > 0

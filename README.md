@@ -39,7 +39,8 @@ trabalho. Inclui painel em cards ou lista, Gantt, relatórios por pessoa e perfi
 | **Orçamento** | Previsto × realizado, lançamento de despesas, saldo, % consumido e **valor agregado**. |
 | **Controle** | Avanço físico, prazo decorrido, **SPI** e **CPI** e uma **saúde** (no rumo, atenção, crítico) que explica os motivos. |
 | **Diário de bordo** | Anotações, avanços, decisões, riscos, problemas e marcos, mais **registros automáticos** de toda mudança relevante. Os registros não podem ser editados. |
-| **Painel** | Projetos em andamento em **cards ou lista**, com indicadores do portfólio, ordenação (prazo, saúde, progresso, nome) e filtros. |
+| **Painel** | Projetos em **cards ou lista** (em andamento, todos ou arquivados), com indicadores do portfólio, ordenação (prazo, saúde, progresso, nome) e filtros. |
+| **Atividades** | O que precisa ser feito: etapas em aberto agrupadas por prazo (atrasadas, hoje, próximos 7 dias, mais adiante, sem prazo), com conclusão em um clique e o filtro "Minhas / Todas". |
 | **Gantt** | Aba própria com escala dia/semana/mês, subtarefas, linha de hoje, saúde por projeto e os mesmos filtros. |
 | **Equipe** | Relatório por pessoa com gráficos, comentários em formato de chat com aviso de mensagens novas, lista de arquivados, exportação CSV. |
 | **Acesso** | Perfis Administrador, Usuário, Visualizador e Aguardando aprovação, com as regras **aplicadas no banco** (RLS). |

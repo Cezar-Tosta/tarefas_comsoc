@@ -18,11 +18,13 @@ import {
   subtaskDialog,
   taskDialog,
   summaryView,
-  tasksView,
+  unreadBanner,
   toolbarView,
   userDialog,
   usersView,
 } from "./views";
+import { activitiesView } from "./activities";
+import { dashboardView, projectView } from "./project";
 
 const admin: Profile = { id: "a", email: "a@x", name: "Ada", role: "admin" };
 const ana: Profile = { id: "u1", email: "ana@x", name: "Ana", role: "user" };
@@ -86,37 +88,51 @@ function as(me: Profile): void {
   state.profiles = [admin, ana, bia, vera];
   state.tasks = makeTasks();
   state.openDone = new Set();
-  state.openTasks = new Set(["t1", "t2"]);
-  state.taskList = "active";
+  state.dashScope = "open";
+  state.dashLayout = "cards";
+  state.activityScope = "all";
+  state.view = "dashboard";
+  state.journal = [];
   state.read = emptyReadState();
   state.openPeople = new Set(["a", "u1", "u2", "__unassigned__"]);
 }
 
 beforeEach(() => as(admin));
 
-describe("tasksView", () => {
+/** Página do projeto de uma tarefa (o antigo card expandido da aba Tarefas). */
+function page(id: string): string {
+  state.projectId = id;
+  return projectView().value;
+}
+
+/** Páginas de todos os projetos, concatenadas. */
+function pages(): string {
+  return state.tasks.map((t) => page(t.id)).join("\n");
+}
+
+describe("project page (task details)", () => {
   it("escapes user text", () => {
-    const out = tasksView().value;
+    const out = pages();
     expect(out).toContain("Relatório &lt;b&gt;anual&lt;/b&gt;");
     expect(out).not.toContain("<b>anual</b>");
   });
 
   it("groups done subtasks in a collapsed details and shows the percentage", () => {
-    const out = tasksView().value;
+    const out = page("t1");
     expect(out).toMatch(/<details\s+class="done-group"[^>]*>/);
     expect(out).not.toMatch(/<details[^>]*\sopen/);
     expect(out).toContain("Concluídas (1)");
     expect(out).toContain("50%");
-    expect(out).toContain("1/2 subtarefas");
+    expect(out).toContain("Etapas (1/2)");
   });
 
   it("reopens the done group when remembered", () => {
     state.openDone.add("t1");
-    expect(tasksView().value).toMatch(/<details\s+class="done-group"[^>]*\sopen/);
+    expect(page("t1")).toMatch(/<details\s+class="done-group"[^>]*\sopen/);
   });
 
   it("gives admins every control", () => {
-    const out = tasksView().value;
+    const out = pages();
     expect(out).toContain('data-action="delete-task"');
     expect(out).toContain('data-action="edit-task" data-id="t2"');
     expect(toolbarView().value).toContain('data-action="new-task"');
@@ -124,7 +140,7 @@ describe("tasksView", () => {
 
   it("lets a user only complete and comment: no edit, delete or subtask structure", () => {
     as(ana);
-    const out = tasksView().value;
+    const out = page("t1");
     expect(out).not.toContain('data-action="edit-task"');
     expect(out).not.toContain('data-action="delete-task"');
     expect(out).not.toContain('data-action="edit-sub"');
@@ -140,13 +156,12 @@ describe("tasksView", () => {
 
   it("gives a user a Concluir button only on their own task without subtasks", () => {
     as(ana); // t1 tem subtarefas: conclui pelas subtarefas
-    expect(tasksView().value).not.toContain('data-action="complete-task"');
+    expect(page("t1")).not.toContain('data-action="complete-task"');
     as(bia); // t2 é dela e não tem subtarefas
-    const out = tasksView().value;
-    expect(out).toMatch(/data-action="complete-task"\s+data-id="t2"/);
-    expect(out).not.toMatch(/data-action="complete-task"\s+data-id="t1"/);
+    expect(page("t2")).toMatch(/data-action="complete-task"\s+data-id="t2"/);
+    expect(page("t1")).not.toMatch(/data-action="complete-task"\s+data-id="t1"/);
     as(admin);
-    expect(tasksView().value).not.toContain('data-action="complete-task"');
+    expect(pages()).not.toContain('data-action="complete-task"');
   });
 
   it("has a collapsible filters panel with the active-filter count", () => {
@@ -164,7 +179,7 @@ describe("tasksView", () => {
 
   it("is read-only for viewers", () => {
     as(vera);
-    const out = tasksView().value;
+    const out = pages();
     expect(out).not.toContain('data-action="edit-');
     expect(out).not.toContain("delete-");
     expect(out).not.toContain("data-form=");
@@ -272,7 +287,7 @@ function withLinks(): void {
 describe("links and comments", () => {
   it("shows the comment count and safe links; unsafe URLs are never anchors", () => {
     withLinks();
-    const out = tasksView().value;
+    const out = page("t1");
     expect(out).toMatch(/data-action="open-comments"\s+data-id="t1"/);
     expect(out).toMatch(/count-pill\s*">3</);
     expect(out).toContain('href="https://exemplo.com/p"');
@@ -282,15 +297,15 @@ describe("links and comments", () => {
 
   it("lets only admins add or remove links", () => {
     withLinks();
-    expect(tasksView().value).toContain('data-action="add-link" data-id="t1"');
+    expect(page("t1")).toContain('data-action="add-link" data-id="t1"');
     as(ana); // dona de t1, mas usuário só lê os links
     withLinks();
-    expect(tasksView().value).not.toContain("add-link");
-    expect(tasksView().value).not.toContain("delete-link");
-    expect(tasksView().value).toContain('href="https://exemplo.com/p"');
+    expect(page("t1")).not.toContain("add-link");
+    expect(page("t1")).not.toContain("delete-link");
+    expect(page("t1")).toContain('href="https://exemplo.com/p"');
     as(vera);
     withLinks();
-    const out = tasksView().value;
+    const out = page("t1");
     expect(out).not.toContain("add-link");
     expect(out).not.toContain("delete-link");
     expect(out).toContain('href="https://exemplo.com/p"');
@@ -359,7 +374,7 @@ describe("assignee filter includes subtask assignees", () => {
       position: 0,
     });
     state.filters = { ...state.filters, assignee: "u1" };
-    const out = tasksView().value;
+    const out = activitiesView().value;
     expect(out).toContain("Sem datas"); // t2 aparece
     expect(out).toContain("Parte da Ana");
     state.filters = { ...state.filters, assignee: "all" };
@@ -369,7 +384,7 @@ describe("assignee filter includes subtask assignees", () => {
 describe("without the comments/links migration", () => {
   it("hides the comment button and link area", () => {
     state.extras = false;
-    const out = tasksView().value;
+    const out = page("t1");
     state.extras = true;
     expect(out).not.toContain("open-comments");
     expect(out).not.toContain("add-link");
@@ -377,19 +392,6 @@ describe("without the comments/links migration", () => {
 });
 
 describe("hide done", () => {
-  it("also hides done subtasks in the task list", () => {
-    state.filters = { ...state.filters, hideDone: true };
-    const hidden = tasksView().value;
-    state.filters = { ...state.filters, hideDone: false };
-    const shown = tasksView().value;
-    expect(shown).toContain("Coletar dados");
-    expect(shown).toContain("Concluídas (1)");
-    expect(hidden).not.toContain("Coletar dados");
-    expect(hidden).not.toContain("done-group");
-    expect(hidden).toContain("Escrever"); // subtarefa em aberto continua
-    expect(hidden).toContain("1/2 subtarefas"); // o progresso continua contando as concluídas
-  });
-
   it("also hides done subtasks in the Gantt", () => {
     state.filters = { ...state.filters, hideDone: true };
     const hidden = ganttView().value;
@@ -430,52 +432,22 @@ describe("summary metrics per profile", () => {
   });
 });
 
-describe("collapsible task cards", () => {
-  it("shows only the title while collapsed", () => {
-    state.openTasks = new Set();
-    const out = tasksView().value;
-    expect(out).toContain("is-collapsed");
-    expect(out).toMatch(/data-action="toggle-task"\s+data-id="t1"\s+aria-expanded="false"/);
-    expect(out).not.toContain("Coletar dados");
-    expect(out).not.toContain('data-action="edit-task"');
-    expect(out).not.toContain("Prioridade");
-  });
-
-  it("opens one card at a time and keeps done subtasks collapsed", () => {
-    state.openTasks = new Set(["t1"]);
-    const out = tasksView().value;
-    expect(out).toMatch(/data-id="t1"\s+aria-expanded="true"/);
-    expect(out).toMatch(/data-id="t2"\s+aria-expanded="false"/);
-    expect(out).toMatch(/<details\s+class="done-group"[^>]*>/);
-    expect(out).not.toMatch(/<details[^>]*\sopen/);
-  });
-
-  it("has an expand/collapse-all switch that reflects the state", () => {
-    state.openTasks = new Set();
-    expect(tasksView().value).toMatch(/role="switch"[^>]*aria-checked="false"/);
-    state.openTasks = new Set(["t1", "t2"]);
-    expect(tasksView().value).toMatch(/role="switch"[^>]*aria-checked="true"/);
-  });
-});
-
 describe("task deadline countdown", () => {
   // t1 termina em 2026-09-30; o teste fixa "hoje" via fake timers
-  it("shows how many days remain next to the title, even when collapsed", () => {
+  it("shows how many days remain on the dashboard card", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 8, 27, 12));
-    state.openTasks = new Set();
-    expect(tasksView().value).toMatch(/dl-soon">Faltam 3 dias</);
+    expect(dashboardView().value).toMatch(/dl-soon">Faltam 3 dias</);
     vi.setSystemTime(new Date(2026, 8, 30, 12));
-    expect(tasksView().value).toMatch(/dl-today">HOJE</);
+    expect(dashboardView().value).toMatch(/dl-today">HOJE</);
     vi.setSystemTime(new Date(2026, 9, 2, 12));
-    expect(tasksView().value).toMatch(/dl-overdue">Atrasada há 2 dias</);
+    expect(dashboardView().value).toMatch(/dl-overdue">Atrasada há 2 dias</);
     vi.useRealTimers();
   });
 
   it("shows nothing for tasks without an end date", () => {
-    state.openTasks = new Set();
     state.tasks = state.tasks.filter((t) => t.id === "t2");
-    expect(tasksView().value).not.toContain("deadline");
+    expect(dashboardView().value).not.toContain('class="deadline');
   });
 });
 
@@ -505,7 +477,7 @@ describe("subtask starting after another", () => {
 
   it("marks the linked subtask and shows the computed dates", () => {
     link();
-    const out = tasksView().value;
+    const out = page("t1");
     expect(out).toContain("↳ após Coletar dados");
     expect(out).toContain("06/09/2026");
     expect(out).not.toContain("10/09/2026");
@@ -519,7 +491,7 @@ describe("subtask starting after another", () => {
   it("hides dates and the start link from regular users, keeping the title", () => {
     as(ana);
     link();
-    const out = tasksView().value;
+    const out = page("t1");
     expect(out).toContain("Escrever");
     expect(out).not.toContain("↳ após");
     expect(out).not.toContain("06/09/2026");
@@ -552,35 +524,34 @@ describe("danger confirmation", () => {
   });
 });
 
-describe("archived list", () => {
-  function archiveT1(): void {
-    const t1 = state.tasks[0];
-    if (!t1) {
-      throw new Error("fixture vazia");
-    }
-    t1.status = "done";
-    t1.subtasks = [];
-    t1.completed_at = "2026-01-01T12:00:00";
+function archiveT1(): void {
+  const t1 = state.tasks[0];
+  if (!t1) {
+    throw new Error("fixture vazia");
   }
+  t1.status = "done";
+  t1.subtasks = [];
+  t1.completed_at = "2026-01-01T12:00:00";
+}
 
-  it("moves tasks finished 10+ days ago out of the active list", () => {
+describe("archived list", () => {
+  it("moves projects finished 10+ days ago to the Arquivados scope of the dashboard", () => {
     archiveT1();
-    const active = tasksView().value;
+    state.dashScope = "all";
+    const active = dashboardView().value;
     expect(active).not.toContain("Relatório &lt;b&gt;anual");
     expect(active).toContain("Sem datas");
     expect(active).toMatch(/Arquivados \(1\)/);
-    state.taskList = "archived";
-    const archived = tasksView().value;
+    state.dashScope = "archived";
+    const archived = dashboardView().value;
     expect(archived).toContain("Relatório &lt;b&gt;anual");
     expect(archived).not.toContain("Sem datas");
     expect(archived).toContain("Concluída em 01/01/2026");
-    state.taskList = "active";
   });
 
   it("explains an empty Arquivados list", () => {
-    state.taskList = "archived";
-    expect(tasksView().value).toContain("Nenhuma tarefa arquivada");
-    state.taskList = "active";
+    state.dashScope = "archived";
+    expect(dashboardView().value).toContain("Nenhum projeto arquivado");
   });
 });
 
@@ -590,25 +561,25 @@ describe("new comments notice", () => {
     state.read = { seen: { t1: 1, t2: 0 }, mine: [] };
     const t1 = state.tasks[0]!;
     t1.comment_count = 4;
-    const out = tasksView().value;
+    const out = unreadBanner().value;
     expect(out).toContain("new-comments");
     expect(out).toContain("3 comentários novos");
     expect(out).toMatch(/data-action="open-comments"\s+data-id="t1"/);
-    expect(out).toContain("3 novos");
+    expect(dashboardView().value).toContain("3 novos");
   });
 
   it("shows nothing when everything was read", () => {
     as(ana);
     state.read = { seen: { t1: 2 }, mine: [] };
     state.tasks[0]!.comment_count = 2;
-    expect(tasksView().value).not.toContain("new-comments");
+    expect(unreadBanner().value).not.toContain("new-comments");
   });
 
   it("does not warn about tasks the user is not part of", () => {
     as(ana);
     state.read = { seen: { t1: 0 }, mine: [] };
     state.tasks[0]!.comment_count = 0;
-    expect(tasksView().value).not.toContain("new-comments");
+    expect(unreadBanner().value).not.toContain("new-comments");
   });
 });
 
@@ -716,10 +687,11 @@ describe("reports tab", () => {
 });
 
 describe("a user with nothing assigned", () => {
-  it("sees a friendly empty state on Tarefas, Gantt and Relatórios", () => {
+  it("sees a friendly empty state on Painel, Atividades, Gantt and Relatórios", () => {
     as(ana);
     state.tasks = [];
-    expect(tasksView().value).toContain("Você ainda não tem tarefas atribuídas");
+    expect(dashboardView().value).toContain("Você ainda não tem tarefas atribuídas");
+    expect(activitiesView().value).toContain("Você ainda não tem tarefas atribuídas");
     expect(ganttView().value).toContain("Você ainda não tem tarefas atribuídas");
     const report = reportsView().value;
     expect(report).toContain("Você ainda não tem tarefas atribuídas");
@@ -762,8 +734,8 @@ describe("project management integration", () => {
     expect(toolbarView("gantt").value).toContain('data-filter="health"');
   });
 
-  it("opens the project page from the task card and from the Gantt task row", () => {
-    expect(tasksView().value).toContain('data-action="open-project" data-id="t1"');
+  it("opens the project page from the dashboard card and from the Gantt task row", () => {
+    expect(dashboardView().value).toContain('data-action="open-project" data-id="t1"');
     as(vera); // até o visualizador abre o projeto pelo Gantt
     const gantt = ganttView().value;
     expect(gantt).toMatch(/data-action="open-project"\s+data-id="t1"/);
@@ -830,5 +802,43 @@ describe("account dialog", () => {
 
   it("is reachable from the top bar", () => {
     expect(shellView().value).toContain('data-action="account"');
+  });
+});
+
+describe("activities tab", () => {
+  it("is a different tab from the dashboard: open work items, grouped by deadline", () => {
+    expect(shellView().value).toMatch(/data-view="tasks"[^>]*>\s*Atividades/);
+    const out = activitiesView().value;
+    expect(out).toContain("act-group");
+    expect(out).toContain("Escrever"); // etapa em aberto
+    expect(out).not.toContain("Coletar dados"); // etapa concluída não aparece
+    expect(out).toContain("Projeto sem etapas"); // t2 vira uma atividade
+    expect(out).not.toContain("dash-card");
+  });
+
+  it("lets the owner tick a step and opens the project from each row", () => {
+    as(ana);
+    const out = activitiesView().value;
+    const toggle = /data-action="toggle-sub"\s+data-id="s2"[^>]*>/.exec(out)?.[0] ?? "";
+    expect(toggle).not.toBe("");
+    expect(toggle).not.toContain("disabled");
+    expect(out).toMatch(/data-action="open-project"\s+data-id="t1"/);
+  });
+
+  it("filters to the person's own activities with 'Minhas'", () => {
+    as(ana);
+    state.activityScope = "mine";
+    const mine = activitiesView().value;
+    expect(mine).toContain("Escrever");
+    expect(mine).not.toContain("Projeto sem etapas"); // t2 é da Bia
+    state.activityScope = "all";
+    expect(activitiesView().value).toContain("Projeto sem etapas");
+  });
+
+  it("hides dates from regular users", () => {
+    as(ana);
+    expect(activitiesView().value).not.toMatch(/\d\d\/\d\d\/\d{4}/);
+    as(admin);
+    expect(activitiesView().value).toContain("20/09/2026");
   });
 });
