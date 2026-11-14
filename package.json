@@ -21,15 +21,15 @@
     "check": "pnpm typecheck && pnpm lint && pnpm test"
   },
   "dependencies": {
-    "@supabase/supabase-js": "2.116.0"
+    "@supabase/supabase-js": "2.119.0"
   },
   "devDependencies": {
     "@types/node": "22.20.3",
-    "oxfmt": "0.68.0",
-    "oxlint": "1.83.0",
+    "oxfmt": "0.77.0",
+    "oxlint": "1.92.0",
     "typescript": "7.0.2",
-    "vite": "8.3.0",
-    "vitest": "5.0.1"
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
   },
   "packageManager": "pnpm@12.3.4"
 }
